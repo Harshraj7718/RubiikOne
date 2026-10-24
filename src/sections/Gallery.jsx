@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { motion, useScroll, useTransform, useMotionValueEvent, AnimatePresence } from "framer-motion";
 import { Chapter } from "../components/Ornament.jsx";
 import { ease } from "../components/motion.jsx";
+import { responsive } from "../lib/img.js";
 
 // `focus` keeps the watch in frame when a landscape image is cropped to a portrait phone.
 const SCENES = [
@@ -15,6 +16,9 @@ const SCENES = [
   { src: "/images/olive-driftwood.webp", focus: "50% 45%", title: "Your time. Your perspective.", note: "A silhouette that speaks without saying too much.", model: "Quartz Olive" },
 ];
 const NUMERALS = ["I", "II", "III", "IV", "V", "VI"];
+// Scenes are full-bleed and zoomed to 1.25; on portrait screens a landscape photo is drawn by
+// height, so it needs far more pixels than the screen is wide.
+const SCENE_SIZES = "(orientation: portrait) 190vh, 125vw";
 
 export default function Gallery() {
   const ref = useRef(null);
@@ -110,10 +114,9 @@ function Scene({ scene, i, steps, progress }) {
 
   return (
     <motion.div className="absolute inset-0 overflow-hidden" style={i === 0 ? undefined : { clipPath }}>
-      <motion.img
-        src={scene.src}
+      <motion.img loading="lazy" decoding="async"
+        {...responsive(scene.src, SCENE_SIZES)}
         alt={`${scene.model} — ${scene.title}`}
-        loading={i < 2 ? "eager" : "lazy"}
         style={{ scale, y, objectPosition: scene.focus }}
         className="h-full w-full object-cover"
         draggable={false}

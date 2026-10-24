@@ -34,7 +34,7 @@ export default function Blueprint({ product, sky, panel, quote, attribution, pla
   const watchBox = (src, extra = "") => (
     // On phones the watch centres a little higher to clear the text block at the bottom.
     <motion.div style={{ x: watchX }} className="absolute inset-x-0 top-0 bottom-[16%] flex items-center justify-center sm:bottom-0">
-      <img
+      <img loading="lazy" decoding="async"
         src={src}
         alt=""
         aria-hidden="true"
@@ -48,7 +48,7 @@ export default function Blueprint({ product, sky, panel, quote, attribution, pla
     <section ref={ref} className="relative h-[100svh] min-h-[640px] overflow-hidden bg-night-900">
       {/* ---------- Above the line: landscape + engraved drawing ---------- */}
       <motion.div className="absolute inset-0" style={{ clipPath: topClip }}>
-        <motion.img src={sky} alt="" aria-hidden="true" style={{ y: skyY }} className="absolute inset-0 h-[116%] w-full object-cover" />
+        <motion.img loading="lazy" decoding="async" src={sky} alt="" aria-hidden="true" style={{ y: skyY }} className="absolute inset-0 h-[116%] w-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-b from-night-900/55 via-night-900/10 to-night-900/40" />
         {watchBox(product.images.lineart, "opacity-95 [filter:drop-shadow(0_0_1.5px_rgba(0,0,0,0.9))]")}
       </motion.div>

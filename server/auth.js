@@ -2,6 +2,7 @@
 // Only a SHA-256 of each session token is stored, so a leaked database can't be replayed as logins.
 import { scrypt, randomBytes, timingSafeEqual, createHash, randomUUID } from "node:crypto";
 import { promisify } from "node:util";
+import { isAdmin } from "./admin.js";
 
 const scryptAsync = promisify(scrypt);
 export const SESSION_COOKIE = "rbk_session";
@@ -37,7 +38,7 @@ function setSessionCookie(res, token, maxAgeSeconds) {
   res.setHeader("Set-Cookie", `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`);
 }
 
-export const publicUser = (u) => (u ? { id: u._id, name: u.name, email: u.email } : null);
+export const publicUser = (u) => (u ? { id: u._id, name: u.name, email: u.email, isAdmin: isAdmin(u) } : null);
 
 /** Simple fixed-window limiter for login/register attempts, keyed by IP + email. */
 function createLimiter({ max, windowMs }) {

@@ -25,7 +25,7 @@ export default function Certificate({ cert, name, size = "lg", className = "" })
 
         <div className="relative flex h-full gap-3 sm:gap-6">
           <div className="flex w-[34%] shrink-0 items-center justify-center">
-            <img src={product.images.cutout} alt={cert.model} className="max-h-full w-auto drop-shadow-[0_14px_20px_rgba(0,0,0,0.6)]" draggable={false} />
+            <img loading="lazy" decoding="async" src={product.images.cutout} alt={cert.model} className="max-h-full w-auto drop-shadow-[0_14px_20px_rgba(0,0,0,0.6)]" draggable={false} />
           </div>
 
           <div className="flex min-w-0 flex-1 flex-col">

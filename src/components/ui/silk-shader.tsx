@@ -430,9 +430,11 @@ export function ShaderBackground({ className }: { className?: string }) {
       const dpr = Math.min(window.devicePixelRatio || 1, 2)
       const rawWidth = Math.max(1, Math.round(bounds.width * dpr))
       const rawHeight = Math.max(1, Math.round(bounds.height * dpr))
+      // RUBIIK: the silk is a soft gradient, so ~1M rendered pixels (stretched to fill) looks the
+      // same as 2M while halving GPU work on large and high-density screens.
       const pixelScale = Math.min(
         1,
-        Math.sqrt(2_000_000 / Math.max(1, rawWidth * rawHeight)),
+        Math.sqrt(1_000_000 / Math.max(1, rawWidth * rawHeight)),
       )
       const width = Math.max(1, Math.round(rawWidth * pixelScale))
       const height = Math.max(1, Math.round(rawHeight * pixelScale))

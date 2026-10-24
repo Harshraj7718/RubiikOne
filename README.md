@@ -14,6 +14,17 @@ npm run dev:open   # same, but forces pre-booking open so you can test the check
 
 The scripts load `.env` automatically (`node --env-file-if-exists=.env`). `.env` is git-ignored; never commit it.
 
+## Performance
+
+- **Images**: `npm run images` writes each large photo at full size plus 768px and 1152px versions, all encoded from the
+  originals at the same quality (`src/data/images.json` lists them). Pages use `responsive()` from `src/lib/img.js`
+  so each device downloads the smallest file that still covers the image at full sharpness. Everything below the hero
+  loads lazily as visitors scroll.
+- **Code**: product, checkout, account and admin pages load on demand; React and the animation library are separate,
+  long-cached files.
+- **Server** (`npm start`): gzip for text, 1-year caching for fingerprinted build files, 30 days for images.
+- The development server (`npm run dev`) is always slower than production; judge speed with `npm run build && npm start`.
+
 ## Database (MongoDB)
 
 All data lives in MongoDB: `users`, `sessions` (auto-expire), `orders`, `waitlist` and `meta` (edition counter, serial key).
@@ -62,6 +73,21 @@ The **Founding Owners wall** (right after the hero) shows certificates of owners
 | `SERIAL_SECRET` | Key for serial check codes (optional; otherwise one is generated and kept in the data file) |
 
 Without the Razorpay keys the store runs in **test mode**: the payment step is clearly labelled and simulates a successful payment, so no money is ever charged.
+
+## Admin dashboard (`/admin`)
+
+Accounts whose email is listed in `ADMIN_EMAILS` (comma-separated, in `.env`) can open the dashboard; everyone else gets
+"no access", and every `/api/admin/*` route checks this on the server.
+
+| Page | What it does |
+| --- | --- |
+| Overview | Pieces sold / held / available, revenue, customers, waitlist, sales per model, last 14 days, recent orders |
+| Orders | Search and filter, full order details with certificates, CSV export |
+| Customers | Accounts with orders, pieces, spend and serials |
+| Waitlist | "Notify me" emails, CSV export |
+| Owners wall | Show or hide each paid order's card, edit its display name |
+| Media library | Every image the site uses (with the files that use it) and the original brand files (admin-only) |
+| Design system | Live colour palette, typography, logo, ornaments, buttons and the certificate card |
 
 ## Where things live
 

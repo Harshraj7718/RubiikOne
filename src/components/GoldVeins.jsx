@@ -94,7 +94,8 @@ export default function GoldVeins({ corner = "top-right", ready, seed = 7, class
           <rect width="600" height="600" filter={`url(#marble-${id})`} opacity="0.6" transform="translate(600 0) scale(-1 1)" />
         </motion.g>
 
-        {/* Soft glow beneath the main vein, breathing gently */}
+        {/* Soft glow beneath the main vein. It fades in once and then holds still: a looping glow
+            would make the browser re-run this SVG's marble and roughness filters on every frame. */}
         <motion.path
           d={MAIN}
           fill="none"
@@ -102,8 +103,8 @@ export default function GoldVeins({ corner = "top-right", ready, seed = 7, class
           strokeWidth="14"
           filter={`url(#glow-${id})`}
           initial={{ opacity: 0 }}
-          animate={active ? { opacity: [0.15, 0.4, 0.15] } : {}}
-          transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 2.4 }}
+          animate={active ? { opacity: 0.3 } : {}}
+          transition={{ duration: 2, ease: "easeOut", delay: 2.4 }}
         />
 
         <g filter={`url(#rough-${id})`} fill="none" strokeLinecap="round">

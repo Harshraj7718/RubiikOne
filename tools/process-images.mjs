@@ -1,7 +1,7 @@
 // Turns the raw brand images into the web assets used by the site sections.
 // Usage: node tools/process-images.mjs <source-dir>   (defaults to ./brand-source)
 import sharp from "sharp";
-import { mkdir, copyFile } from "node:fs/promises";
+import { mkdir, copyFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const SRC = path.resolve(process.argv[2] ?? "brand-source");
@@ -55,11 +55,22 @@ async function cutout(file, region, name, { lo = 228, hi = 246, seeds = [] } = {
   console.log("cutout", name);
 }
 
+// Width variants for responsive loading: phones get a 768px file instead of the full-size one.
+// Each size is encoded straight from the original at the same quality, so nothing is re-compressed twice.
+const VARIANT_WIDTHS = [768, 1152];
+const manifest = {};
+
 const crop = async (file, region, name, width = 1800) => {
-  let img = sharp(src(file));
-  if (region) img = img.extract(region);
-  await img.resize({ width, withoutEnlargement: true }).webp({ quality: 86 }).toFile(out(name));
-  console.log("crop", name);
+  const base = () => (region ? sharp(src(file)).extract(region) : sharp(src(file)));
+  const info = await base().resize({ width, withoutEnlargement: true }).webp({ quality: 86 }).toFile(out(name));
+  const sizes = [[name, info.width]];
+  for (const w of VARIANT_WIDTHS.filter((w) => w < info.width - 100)) {
+    const variant = name.replace(/\.webp$/, `-${w}.webp`);
+    await base().resize({ width: w }).webp({ quality: 86 }).toFile(out(variant));
+    sizes.unshift([variant, w]);
+  }
+  manifest[name] = sizes;
+  console.log("crop", name, sizes.map(([, w]) => w).join("/"));
 };
 
 // Product cut-outs from the spec sheets (watch, crown and caseback).
@@ -126,4 +137,8 @@ async function lineArt(input, name, { gain = 2.2, floor = 26 } = {}) {
 }
 await lineArt("skeleton-watch.webp", "skeleton-lineart.webp");
 await lineArt("olive-watch.webp", "olive-lineart.webp");
+
+// Which responsive sizes exist for each photo; read by src/lib/img.js to build srcset.
+await writeFile(path.resolve("src/data/images.json"), JSON.stringify(manifest, null, 2) + "\n");
+console.log("wrote src/data/images.json");
 

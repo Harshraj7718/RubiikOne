@@ -15,7 +15,7 @@ export default function Finale() {
     <section ref={ref} className="relative h-[180vh]">
       <div className="sticky top-0 flex h-screen items-center justify-center overflow-hidden">
         <motion.div style={{ clipPath: clip }} className="absolute inset-0">
-          <motion.img src="/images/olive-gentleman.webp" alt="" aria-hidden="true" style={{ scale }} className="h-full w-full object-cover object-top" />
+          <motion.img loading="lazy" decoding="async" src="/images/olive-gentleman.webp" alt="" aria-hidden="true" style={{ scale }} className="h-full w-full object-cover object-top" />
           <div className="absolute inset-0 bg-night/65" />
         </motion.div>
         <div className="relative flex flex-col items-center px-5 text-center">

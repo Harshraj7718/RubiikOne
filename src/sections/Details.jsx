@@ -7,6 +7,7 @@ import { SplitReveal, FadeUp, ease } from "../components/motion.jsx";
 import { Chapter, Divider } from "../components/Ornament.jsx";
 import { Emblem } from "../components/Logo.jsx";
 import { PRODUCTS, formatINR } from "../data/catalog.js";
+import { responsive } from "../lib/img.js";
 
 const [A, B] = PRODUCTS;
 // Both models list the same specification keys in the same order.
@@ -121,7 +122,8 @@ export default function Details() {
             {hover !== null && (
               <motion.img
                 key={hover}
-                src={FEATURES[hover][2]}
+                {...responsive(FEATURES[hover][2], "224px")}
+                decoding="async"
                 alt=""
                 className="pointer-events-none fixed left-0 top-0 z-30 hidden h-72 w-56 object-cover shadow-2xl md:block"
                 style={{ x: sx, y: sy, translateX: "-50%", translateY: "-50%" }}
@@ -151,7 +153,7 @@ function Pedestal({ p, i, order, dim, onFocus }) {
         <div className="relative flex h-[30vh] items-end justify-center sm:h-[52vh]">
           {/* Spotlight */}
           <div className="absolute bottom-0 left-1/2 h-[90%] w-[120%] -translate-x-1/2 rounded-full opacity-30 blur-3xl" style={{ background: p.accent }} />
-          <motion.img
+          <motion.img loading="lazy" decoding="async"
             src={p.images.cutout}
             alt={`${p.name} ${p.edition}`}
             className="relative z-10 h-full w-auto drop-shadow-[0_30px_30px_rgba(0,0,0,0.35)] transition-transform duration-[1.2s] ease-lux group-hover:-translate-y-4 group-hover:scale-[1.03]"

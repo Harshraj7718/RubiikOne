@@ -41,9 +41,16 @@ export default function Account() {
           <h1 className="mt-3 font-serif text-5xl sm:text-6xl">{user.name}</h1>
           <p className="mt-2 text-ivory-dim">{user.email}</p>
         </div>
-        <button onClick={logout} className="btn-ghost">
-          Sign out
-        </button>
+        <div className="flex flex-wrap gap-3">
+          {user.isAdmin && (
+            <Link to="/admin" className="btn-gold">
+              Open dashboard
+            </Link>
+          )}
+          <button onClick={logout} className="btn-ghost">
+            Sign out
+          </button>
+        </div>
       </motion.div>
 
       <h2 className="mt-16 font-serif text-3xl">Your collection</h2>

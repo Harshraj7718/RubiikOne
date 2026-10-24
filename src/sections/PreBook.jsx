@@ -149,7 +149,7 @@ function ProductCard({ p, i, phase, stock }) {
         <GiftRibbon label="25 · XII" />
         <div className="relative flex flex-col items-center gap-8 sm:flex-row">
           <Link to={`/watch/${p.slug}`} className="shrink-0" data-cursor="Discover">
-            <img
+            <img loading="lazy" decoding="async"
               src={p.images.cutout}
               alt={`${p.name} ${p.edition}`}
               className="h-72 w-auto drop-shadow-[0_30px_40px_rgba(0,0,0,0.6)] transition-transform duration-[1.2s] ease-lux group-hover:-rotate-6 group-hover:scale-105"

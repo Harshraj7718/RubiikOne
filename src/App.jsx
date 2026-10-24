@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import Lenis from "lenis";
@@ -8,9 +8,13 @@ import Nav from "./components/Nav.jsx";
 import CartDrawer from "./components/CartDrawer.jsx";
 import Footer from "./components/Footer.jsx";
 import Home from "./pages/Home.jsx";
-import Product from "./pages/Product.jsx";
-import Checkout from "./pages/Checkout.jsx";
-import Account from "./pages/Account.jsx";
+
+// Everything except the home page is loaded on demand, so the first visit downloads only what it shows.
+const Product = lazy(() => import("./pages/Product.jsx"));
+const Checkout = lazy(() => import("./pages/Checkout.jsx"));
+const Account = lazy(() => import("./pages/Account.jsx"));
+const AdminApp = lazy(() => import("./pages/admin/AdminApp.jsx"));
+const PageFallback = () => <div className="min-h-screen bg-night" />;
 import { useShop } from "./lib/shop.jsx";
 
 let lenis;
@@ -59,6 +63,20 @@ export default function App() {
     else window.scrollTo(0, 0);
   }, [location.pathname, location.hash]);
 
+  // The admin dashboard has its own layout: no site loader, menu bar, cart or footer.
+  if (location.pathname.startsWith("/admin"))
+    return (
+      <>
+        <Cursor />
+        {/* Mounted under /admin/* so the dashboard's own routes resolve relative to /admin. */}
+        <Suspense fallback={<PageFallback />}>
+          <Routes location={location}>
+            <Route path="/admin/*" element={<AdminApp />} />
+          </Routes>
+        </Suspense>
+      </>
+    );
+
   return (
     <>
       <AnimatePresence>
@@ -81,13 +99,15 @@ export default function App() {
           animate={{ opacity: 1, transition: { duration: 0.8 } }}
           exit={{ opacity: 0, transition: { duration: 0.4 } }}
         >
-          <Routes location={location}>
-            <Route path="/" element={<Home ready={loaded} />} />
-            <Route path="/watch/:slug" element={<Product />} />
-            <Route path="/checkout" element={<Checkout />} />
-            <Route path="/account" element={<Account />} />
-            <Route path="*" element={<Home ready={loaded} />} />
-          </Routes>
+          <Suspense fallback={<PageFallback />}>
+            <Routes location={location}>
+              <Route path="/" element={<Home ready={loaded} />} />
+              <Route path="/watch/:slug" element={<Product />} />
+              <Route path="/checkout" element={<Checkout />} />
+              <Route path="/account" element={<Account />} />
+              <Route path="*" element={<Home ready={loaded} />} />
+            </Routes>
+          </Suspense>
         </motion.main>
       </AnimatePresence>
       <Footer />

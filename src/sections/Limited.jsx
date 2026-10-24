@@ -22,7 +22,7 @@ export default function Limited() {
 
   return (
     <section id="limited" ref={ref} className="relative overflow-hidden py-32 sm:py-48">
-      <motion.img
+      <motion.img loading="lazy" decoding="async"
         src="/images/duo-flatlay.webp"
         alt=""
         aria-hidden="true"

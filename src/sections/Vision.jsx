@@ -3,6 +3,7 @@ import { useRef } from "react";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { SplitReveal, FadeUp, ParallaxImage } from "../components/motion.jsx";
 import { Chapter } from "../components/Ornament.jsx";
+import { responsive } from "../lib/img.js";
 
 const PILLARS = [
   ["Precision", "Every detail matters, from the movement to the smallest bevel on the case."],
@@ -27,7 +28,7 @@ export default function Vision() {
             strength={80}
           />
           <motion.div style={{ y: floatY }} className="absolute bottom-0 right-0 h-[52%] w-[48%] overflow-hidden rounded-sm shadow-2xl shadow-black/60" data-cursor="View">
-            <img src="/images/olive-wrist-dark.webp" alt="RUBIIK ONE Quartz on the wrist" className="h-full w-full scale-110 object-cover transition-transform duration-[1.6s] ease-lux hover:scale-125" />
+            <img loading="lazy" decoding="async" {...responsive("/images/olive-wrist-dark.webp", "(max-width: 1024px) 62vw, 36vw")} alt="RUBIIK ONE Quartz on the wrist" className="h-full w-full scale-110 object-cover transition-transform duration-[1.6s] ease-lux hover:scale-125" />
           </motion.div>
           <motion.div style={{ scaleY: barsScale }} className="absolute -right-2 top-6 flex origin-top gap-3 lg:-right-8">
             <span className="bg-gold h-40 w-[3px]" />

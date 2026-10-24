@@ -1,6 +1,7 @@
 // Reusable motion primitives: split-text reveals, scroll-scrubbed words, parallax images, magnetic hover.
 import { useRef } from "react";
 import { motion, useScroll, useTransform, useSpring, useMotionValue } from "framer-motion";
+import { responsive } from "../lib/img.js";
 
 export const ease = [0.22, 1, 0.36, 1];
 
@@ -79,17 +80,20 @@ function Word({ children, progress, range, gold }) {
   );
 }
 
-/** Image that drifts slower than the page and zooms slightly while in view. */
-export function ParallaxImage({ src, alt, className = "", strength = 120, scale = 1.25, imgClassName = "" }) {
+/**
+ * Image that drifts slower than the page and zooms slightly while in view.
+ * `sizes` is how wide the image is drawn (including the zoom), so the browser picks a file that
+ * stays sharp; it errs on the large side.
+ */
+export function ParallaxImage({ src, alt, className = "", strength = 120, scale = 1.25, imgClassName = "", sizes = "(max-width: 1024px) 125vw, 75vw" }) {
   const ref = useRef(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
   const y = useTransform(scrollYProgress, [0, 1], [-strength, strength]);
   return (
     <div ref={ref} className={`relative overflow-hidden ${className}`}>
-      <motion.img
-        src={src}
+      <motion.img loading="lazy" decoding="async"
+        {...responsive(src, sizes)}
         alt={alt}
-        loading="lazy"
         style={{ y, scale }}
         className={`absolute inset-0 h-full w-full object-cover ${imgClassName}`}
       />

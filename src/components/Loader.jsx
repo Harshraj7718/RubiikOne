@@ -1,45 +1,47 @@
 // Opening sequence: a dial ring fills while the wordmark assembles, then the curtain lifts.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, animate, useMotionValue, useTransform } from "framer-motion";
 import { Emblem } from "./Logo.jsx";
 import { ease } from "./motion.jsx";
 
-const IMAGES = ["/images/skeleton-watch.webp", "/images/olive-watch.webp", "/images/olive-silk.webp", "/images/skeleton-cuff.webp"];
+// Only what the first screen needs: the two hero watches (small cut-outs) and the fonts.
+// Everything else loads in the background or as the visitor scrolls.
+const CRITICAL = ["/images/skeleton-watch.webp", "/images/olive-watch.webp"];
+const MAX_WAIT_MS = 2200;
 
 export default function Loader({ onDone }) {
   const progress = useMotionValue(0);
   const dash = useTransform(progress, [0, 100], [1, 0]);
   const [pct, setPct] = useState(0);
+  const done = useRef(onDone);
+  done.current = onDone;
 
   useEffect(() => {
-    let loaded = 0;
-    const bump = () => {
-      loaded += 1;
-      animate(progress, (loaded / IMAGES.length) * 100, { duration: 0.9, ease });
-    };
-    IMAGES.forEach((src) => {
-      const img = new Image();
-      img.onload = img.onerror = bump;
-      img.src = src;
-    });
+    const steps = [...CRITICAL.map((src) => new Promise((res) => Object.assign(new Image(), { onload: res, onerror: res, src }))), document.fonts?.ready ?? Promise.resolve()];
+    let finished = 0;
+    for (const p of steps) p.then(() => animate(progress, (++finished / steps.length) * 100, { duration: 0.35, ease }));
+    let ended = false;
     const unsub = progress.on("change", (v) => {
       setPct(Math.round(v));
-      if (v >= 99.5) setTimeout(onDone, 650);
+      if (v >= 99.5 && !ended) {
+        ended = true;
+        setTimeout(() => done.current(), 120);
+      }
     });
-    // Never hold the visitor hostage on a slow network.
-    const failSafe = setTimeout(() => animate(progress, 100, { duration: 0.8 }), 5000);
+    // Never hold the visitor back on a slow network.
+    const failSafe = setTimeout(() => animate(progress, 100, { duration: 0.3 }), MAX_WAIT_MS);
     return () => {
       unsub();
       clearTimeout(failSafe);
     };
-  }, [progress, onDone]);
+  }, [progress]);
 
   const letters = ["R", "U", "B", "I", "I", "K"];
 
   return (
     <motion.div
       className="fixed inset-0 z-[100] flex items-center justify-center bg-night-900"
-      exit={{ clipPath: "inset(0 0 100% 0)", transition: { duration: 1.2, ease } }}
+      exit={{ clipPath: "inset(0 0 100% 0)", transition: { duration: 0.8, ease } }}
       initial={{ clipPath: "inset(0 0 0% 0)" }}
     >
       <svg viewBox="0 0 200 200" className="absolute h-[78vmin] w-[78vmin] -rotate-90">
@@ -76,7 +78,7 @@ export default function Loader({ onDone }) {
       </svg>
 
       <div className="relative flex flex-col items-center gap-6">
-        <motion.div initial={{ scaleY: 0 }} animate={{ scaleY: 1 }} transition={{ duration: 1.2, ease }} style={{ originY: 0 }}>
+        <motion.div initial={{ scaleY: 0 }} animate={{ scaleY: 1 }} transition={{ duration: 0.7, ease }} style={{ originY: 0 }}>
           <Emblem className="h-14" animate />
         </motion.div>
         <div className="flex gap-[0.35em] font-serif text-4xl sm:text-6xl">
@@ -86,7 +88,7 @@ export default function Loader({ onDone }) {
                 className={`inline-block ${i === 3 || i === 4 ? "text-gold" : ""}`}
                 initial={{ y: "110%" }}
                 animate={{ y: 0 }}
-                transition={{ duration: 1, ease, delay: 0.3 + i * 0.08 }}
+                transition={{ duration: 0.6, ease, delay: 0.1 + i * 0.05 }}
               >
                 {l}
               </motion.span>

@@ -41,13 +41,13 @@ export default function Experience() {
         </div>
 
         <div className="relative h-[560px]">
-          <motion.img
+          <motion.img loading="lazy" decoding="async"
             src="/images/skeleton-caseback.webp"
             alt="RUBIIK ONE Automatic exhibition caseback"
             style={{ rotate: spinA, y: yA }}
             className="absolute left-0 top-0 w-[62%] drop-shadow-[0_40px_50px_rgba(0,0,0,0.6)]"
           />
-          <motion.img
+          <motion.img loading="lazy" decoding="async"
             src="/images/olive-caseback.webp"
             alt="RUBIIK ONE Quartz engraved caseback"
             style={{ rotate: spinB, y: yB }}

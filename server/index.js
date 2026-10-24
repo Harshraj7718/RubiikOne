@@ -1,6 +1,7 @@
 // RUBIIK store API: launch status, live stock, accounts, pre-orders with payment,
 // owner certificates and the public Founding Owners wall. Data lives in MongoDB (see db.js).
 import express from "express";
+import compression from "compression";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
@@ -8,6 +9,7 @@ import { randomUUID, randomBytes, createHmac } from "node:crypto";
 import { PRODUCTS, LAUNCH, findProduct, phaseAt, unitPrice } from "../src/data/catalog.js";
 import { connectDb } from "./db.js";
 import { mountAuth } from "./auth.js";
+import { mountAdmin } from "./admin.js";
 import { PAYMENT_MODE, startPayment, verifyPayment } from "./payments.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -30,7 +32,7 @@ const { users, orders, waitlist, meta, withTransaction } = store;
 const app = express();
 // Express 4 doesn't catch rejected promises from async handlers; send them to the error handler
 // instead of letting a database hiccup crash the process.
-for (const method of ["get", "post"]) {
+for (const method of ["get", "post", "patch"]) {
   const register = app[method].bind(app);
   app[method] = (route, ...handlers) =>
     register(
@@ -49,8 +51,11 @@ for (const method of ["get", "post"]) {
     );
 }
 app.set("trust proxy", 1);
+// gzip text responses (HTML, JS, CSS, JSON). Images are already compressed and are skipped.
+app.use(compression());
 app.use(express.json({ limit: "32kb" }));
-const { requireUser } = mountAuth(app, store);
+const { requireUser, currentUser } = mountAuth(app, store);
+mountAdmin(app, store, { currentUser, root });
 
 const phase = () => phaseAt(Date.now(), FORCE_PREBOOK);
 // Orders that currently claim pieces: paid ones, and unpaid ones whose hold hasn't lapsed.
@@ -241,8 +246,15 @@ app.get("/api/owners", async (_req, res) => {
 // Production: serve the built client and let React Router handle deep links.
 const dist = path.join(root, "dist");
 if (existsSync(dist)) {
-  app.use(express.static(dist, { maxAge: "7d", index: false }));
-  app.get(/^(?!\/api).*/, (_req, res) => res.sendFile(path.join(dist, "index.html")));
+  // Build files carry a content hash in their name, so they can be cached for a year;
+  // images for 30 days; index.html is always revalidated so a new release shows up at once.
+  app.use("/assets", express.static(path.join(dist, "assets"), { maxAge: "1y", immutable: true, index: false }));
+  app.use("/images", express.static(path.join(dist, "images"), { maxAge: "30d", index: false }));
+  app.use(express.static(dist, { maxAge: "1d", index: false }));
+  app.get(/^(?!\/api).*/, (_req, res) => {
+    res.setHeader("Cache-Control", "no-cache");
+    res.sendFile(path.join(dist, "index.html"));
+  });
 }
 
 // Last-resort handler: never leak internals to the browser.
