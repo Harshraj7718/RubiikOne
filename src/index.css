@@ -1,0 +1,137 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    background: #07110d;
+    color: #efe9df;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: clip;
+  }
+  /* clip (not hidden) so position: sticky keeps working for the pinned sections */
+  body {
+    @apply font-sans font-light bg-night text-ivory;
+    overflow-x: clip;
+  }
+  ::selection {
+    background: #c9a464;
+    color: #07110d;
+  }
+  html.lenis, html.lenis body { height: auto; }
+  .lenis.lenis-smooth { scroll-behavior: auto !important; }
+  .lenis.lenis-stopped { overflow: hidden; }
+  @media (hover: hover) and (pointer: fine) {
+    body.has-cursor, body.has-cursor a, body.has-cursor button { cursor: none; }
+  }
+}
+
+@layer components {
+  /* Gold foil: a metallic gradient with a slow travelling glint. */
+  .text-gold {
+    background: linear-gradient(100deg, #8c6a35 0%, #c9a464 20%, #f6e3b4 32%, #c9a464 44%, #8c6a35 60%, #d9b979 80%, #8c6a35 100%);
+    background-size: 250% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: foil 7s ease-in-out infinite;
+  }
+  .bg-gold {
+    background: linear-gradient(135deg, #f1dcaa 0%, #c9a464 40%, #8c6a35 75%, #c9a464 100%);
+  }
+  .eyebrow {
+    @apply font-sans text-[11px] uppercase tracking-mega text-ivory-mute;
+  }
+  .hairline {
+    background: linear-gradient(90deg, transparent, rgba(201, 164, 100, 0.7), transparent);
+    height: 1px;
+  }
+  .grain::after {
+    content: "";
+    position: absolute;
+    inset: -50%;
+    pointer-events: none;
+    opacity: 0.06;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    animation: grain 8s steps(6) infinite;
+  }
+  /* Faint gold damask lattice used behind regal sections. */
+  .damask {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><g fill='none' stroke='%23c9a464' stroke-width='0.6' opacity='0.5'><path d='M60 8 L72 30 L60 52 L48 30 Z'/><path d='M60 68 L72 90 L60 112 L48 90 Z'/><path d='M8 60 L30 48 L52 60 L30 72 Z'/><path d='M68 60 L90 48 L112 60 L90 72 Z'/><circle cx='60' cy='60' r='4'/><circle cx='0' cy='0' r='3'/><circle cx='120' cy='0' r='3'/><circle cx='0' cy='120' r='3'/><circle cx='120' cy='120' r='3'/></g></svg>");
+    background-size: 120px 120px;
+  }
+  /* Thin double frame with diamond corners, like an engraved certificate. */
+  .frame-royal {
+    position: relative;
+    border: 1px solid rgba(201, 164, 100, 0.28);
+    outline: 1px solid rgba(201, 164, 100, 0.12);
+    outline-offset: 6px;
+  }
+  .frame-royal::before,
+  .frame-royal::after {
+    content: "";
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    background: #c9a464;
+    transform: rotate(45deg);
+  }
+  .frame-royal::before { top: -5px; left: -5px; }
+  .frame-royal::after { bottom: -5px; right: -5px; }
+
+  .btn-gold {
+    @apply relative inline-flex items-center justify-center gap-3 overflow-hidden px-9 py-4 font-sans text-[11px] uppercase tracking-wide2 text-night transition-all duration-700 ease-lux;
+    background: linear-gradient(135deg, #f1dcaa 0%, #c9a464 40%, #8c6a35 80%, #c9a464 100%);
+    background-size: 200% 200%;
+    box-shadow: 0 0 0 1px rgba(241, 220, 170, 0.35) inset, 0 10px 40px -12px rgba(201, 164, 100, 0.55);
+  }
+  .btn-gold::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.6) 50%, transparent 70%);
+    transform: translateX(-120%);
+    transition: transform 1.1s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .btn-gold::after {
+    content: "";
+    position: absolute;
+    inset: 4px;
+    border: 1px solid rgba(7, 17, 13, 0.25);
+    pointer-events: none;
+  }
+  .btn-gold:hover { background-position: 100% 100%; }
+  .btn-gold:hover::before { transform: translateX(120%); }
+  .btn-gold:disabled { @apply opacity-60; }
+  .btn-ghost {
+    @apply relative inline-flex items-center justify-center gap-3 border border-gold/40 px-9 py-4 font-sans text-[11px] uppercase tracking-wide2 text-ivory transition-colors duration-700 ease-lux hover:border-gold hover:bg-gold/10 hover:text-gold-light;
+  }
+  .field {
+    @apply w-full border-0 border-b border-ivory/20 bg-transparent px-0 py-3 font-sans text-base text-ivory placeholder:text-ivory-mute/60 focus:border-gold focus:outline-none focus:ring-0 transition-colors;
+  }
+}
+
+@keyframes foil {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes grain {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-5%, 3%); }
+  40% { transform: translate(4%, -6%); }
+  60% { transform: translate(-3%, 5%); }
+  80% { transform: translate(6%, -2%); }
+}
+
+@keyframes marquee {
+  to { transform: translateX(-50%); }
+}
+
+@keyframes spin-slow {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

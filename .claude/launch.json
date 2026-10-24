@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "rubiik-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:open"],
+      "port": 5173
+    }
+  ]
+}

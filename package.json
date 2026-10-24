@@ -1,0 +1,31 @@
+{
+  "name": "rubiik",
+  "version": "1.0.0",
+  "private": true,
+  "description": "RUBIIK ONE — limited edition watch store (React + Vite + Tailwind + Framer Motion, Node/Express API)",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n api,web -c yellow,cyan \"node --watch server/index.js\" \"vite\"",
+    "dev:open": "concurrently -n api,web -c yellow,cyan \"node --watch server/index.js --force-prebook\" \"vite\"",
+    "build": "vite build",
+    "start": "node server/index.js",
+    "images": "node tools/process-images.mjs"
+  },
+  "dependencies": {
+    "express": "4.21.2",
+    "framer-motion": "11.15.0",
+    "lenis": "1.1.18",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-router-dom": "6.28.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "4.3.4",
+    "autoprefixer": "10.4.20",
+    "concurrently": "9.1.0",
+    "postcss": "8.4.49",
+    "sharp": "0.33.5",
+    "tailwindcss": "3.4.17",
+    "vite": "5.4.11"
+  }
+}
