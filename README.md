@@ -14,6 +14,19 @@ npm run dev:open   # same, but forces pre-booking open so you can test the check
 
 The scripts load `.env` automatically (`node --env-file-if-exists=.env`). `.env` is git-ignored; never commit it.
 
+## Deploying on Vercel
+
+The site deploys from GitHub. Vercel serves the built pages and images from its CDN; every `/api/*` request runs the
+same Express app as a serverless function (`api/index.js` → `server/app.js`). `vercel.json` routes `/api/*` to the
+function and every other path (`/admin`, `/account`, `/watch/...`) to the app.
+
+1. **Environment variables** (Vercel → Project → Settings → Environment Variables, for Production):
+   `MONGODB_URI`, `MONGODB_DB` (`rubiik`), `ADMIN_EMAILS`; later `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`.
+   Redeploy after adding or changing them.
+2. **MongoDB Atlas → Network Access**: Vercel has no fixed IP addresses, so allow `0.0.0.0/0` and rely on a strong
+   database password.
+3. Push to `main`; Vercel builds and deploys. The dashboard is at `https://<your-domain>/admin`.
+
 ## Performance
 
 - **Images**: `npm run images` writes each large photo at full size plus 768px and 1152px versions, all encoded from the
