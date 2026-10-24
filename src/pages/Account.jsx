@@ -42,11 +42,6 @@ export default function Account() {
           <p className="mt-2 text-ivory-dim">{user.email}</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          {user.isAdmin && (
-            <Link to="/admin" className="btn-gold">
-              Open dashboard
-            </Link>
-          )}
           <button onClick={logout} className="btn-ghost">
             Sign out
           </button>

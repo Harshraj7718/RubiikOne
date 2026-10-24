@@ -27,7 +27,7 @@ export default function Customers() {
               {list.map((c) => (
                 <tr key={c.id}>
                   <td className="px-4 py-3">
-                    {c.name} {c.admin && <span className="ml-2 border border-gold/50 px-1.5 text-[9px] uppercase tracking-[0.15em] text-gold">Admin</span>}
+                    {c.name}
                     <span className="block text-xs text-ivory-mute">{c.email}</span>
                   </td>
                   <td className="px-4 py-3 text-ivory-mute">{fmtDateTime(c.createdAt)}</td>

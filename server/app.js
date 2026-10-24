@@ -51,8 +51,8 @@ export async function createApp({ serveClient = true } = {}) {
   // gzip text responses (HTML, JS, CSS, JSON). Images are already compressed and are skipped.
   app.use(compression());
   app.use(express.json({ limit: "32kb" }));
-  const { requireUser, currentUser } = mountAuth(app, store);
-  mountAdmin(app, store, { currentUser, root });
+  const { requireUser } = mountAuth(app, store);
+  mountAdmin(app, store, { root });
 
   const phase = () => phaseAt(Date.now(), FORCE_PREBOOK);
   // Orders that currently claim pieces: paid ones, and unpaid ones whose hold hasn't lapsed.

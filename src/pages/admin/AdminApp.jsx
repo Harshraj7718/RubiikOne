@@ -1,7 +1,7 @@
-// Admin dashboard shell: access guard, sidebar navigation and the section routes.
+// Admin dashboard shell: admin sign-in, sidebar navigation and the section routes.
+// The dashboard uses its own admin username/password, separate from customer accounts.
+import { useEffect, useState } from "react";
 import { NavLink, Routes, Route, Link } from "react-router-dom";
-import { useAuth } from "../../lib/auth.jsx";
-import AuthForm from "../../components/AuthForm.jsx";
 import { Emblem, Wordmark } from "../../components/Logo.jsx";
 import Overview from "./Overview.jsx";
 import Orders from "./Orders.jsx";
@@ -22,33 +22,23 @@ const LINKS = [
 ];
 
 export default function AdminApp() {
-  const { user, ready, logout } = useAuth();
+  const [state, setState] = useState({ checked: false, admin: null, configured: true });
 
-  if (!ready) return <div className="min-h-screen bg-night-900" />;
-  if (!user)
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-night-900 px-5 py-16">
-        <div className="w-full max-w-lg">
-          <AuthForm title="RUBIIK admin" note="Sign in with an admin account to open the dashboard." />
-        </div>
-      </div>
-    );
-  if (!user.isAdmin)
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-5 bg-night-900 px-5 text-center">
-        <Emblem className="h-12" />
-        <h1 className="font-serif text-4xl">No admin access</h1>
-        <p className="max-w-md text-ivory-dim">You're signed in as {user.email}, which isn't on the admin list.</p>
-        <div className="flex gap-3">
-          <Link to="/" className="btn-ghost">
-            Back to the site
-          </Link>
-          <button onClick={logout} className="btn-gold">
-            Switch account
-          </button>
-        </div>
-      </div>
-    );
+  useEffect(() => {
+    fetch("/api/admin/me")
+      .then((r) => r.json())
+      .then((d) => setState({ checked: true, admin: d.admin ?? null, configured: d.configured !== false }))
+      .catch(() => setState({ checked: true, admin: null, configured: true }));
+  }, []);
+
+  const logout = async () => {
+    await fetch("/api/admin/logout", { method: "POST" }).catch(() => {});
+    setState((s) => ({ ...s, admin: null }));
+  };
+
+  if (!state.checked) return <div className="min-h-screen bg-night-900" />;
+  if (!state.admin) return <AdminLogin configured={state.configured} onLogin={(admin) => setState((s) => ({ ...s, admin }))} />;
+  const user = { email: state.admin.username };
 
   return (
     <div className="min-h-screen bg-night-900 lg:grid lg:grid-cols-[250px_1fr]">
@@ -105,6 +95,55 @@ export default function AdminApp() {
           <Route path="design" element={<Design />} />
         </Routes>
       </main>
+    </div>
+  );
+}
+
+function AdminLogin({ configured, onLogin }) {
+  const [form, setForm] = useState({ username: "", password: "" });
+  const [state, setState] = useState({ busy: false, error: "" });
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setState({ busy: true, error: "" });
+    try {
+      const res = await fetch("/api/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Couldn't sign in.");
+      onLogin(data.admin);
+    } catch (err) {
+      setState({ busy: false, error: err.message });
+    }
+  };
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-night-900 px-5 py-16">
+      <form onSubmit={submit} className="frame-royal w-full max-w-md bg-night-800/70 p-8 sm:p-10">
+        <div className="flex items-center gap-3">
+          <Emblem className="h-8" />
+          <span>
+            <Wordmark className="block text-xl leading-none" />
+            <span className="text-[9px] uppercase tracking-[0.35em] text-gold">Admin</span>
+          </span>
+        </div>
+        <h1 className="mt-8 font-serif text-4xl">Dashboard sign-in</h1>
+        {!configured && <p className="mt-4 text-sm text-red-300">Admin login isn't set up on this server yet: add ADMIN_USERNAME and ADMIN_PASSWORD to its environment.</p>}
+        <label className="mt-8 block">
+          <span className="eyebrow">Username</span>
+          <input className="field" autoComplete="username" value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} required />
+        </label>
+        <label className="mt-6 block">
+          <span className="eyebrow">Password</span>
+          <input className="field" type="password" autoComplete="current-password" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} required />
+        </label>
+        {state.error && <p className="mt-5 text-sm text-red-300">{state.error}</p>}
+        <button className="btn-gold mt-8 w-full" disabled={state.busy || !configured}>
+          {state.busy ? "Signing in…" : "Sign in"}
+        </button>
+        <Link to="/" className="mt-6 block text-center text-[10px] uppercase tracking-[0.2em] text-ivory-mute hover:text-gold">
+          Back to the site
+        </Link>
+      </form>
     </div>
   );
 }

@@ -21,7 +21,7 @@ same Express app as a serverless function (`api/index.js` → `server/app.js`). 
 function and every other path (`/admin`, `/account`, `/watch/...`) to the app.
 
 1. **Environment variables** (Vercel → Project → Settings → Environment Variables, for Production):
-   `MONGODB_URI`, `MONGODB_DB` (`rubiik`), `ADMIN_EMAILS`; later `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`.
+   `MONGODB_URI`, `MONGODB_DB` (`rubiik`), `ADMIN_USERNAME`, `ADMIN_PASSWORD`; later `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`.
    Redeploy after adding or changing them.
 2. **MongoDB Atlas → Network Access**: Vercel has no fixed IP addresses, so allow `0.0.0.0/0` and rely on a strong
    database password.
@@ -89,8 +89,10 @@ Without the Razorpay keys the store runs in **test mode**: the payment step is c
 
 ## Admin dashboard (`/admin`)
 
-Accounts whose email is listed in `ADMIN_EMAILS` (comma-separated, in `.env`) can open the dashboard; everyone else gets
-"no access", and every `/api/admin/*` route checks this on the server.
+The dashboard has its own sign-in: one admin username and password, set as `ADMIN_USERNAME` and `ADMIN_PASSWORD`
+in `.env` (and in Vercel's Environment Variables). It is separate from customer accounts. A successful sign-in gets a
+12-hour httpOnly session; failed attempts are limited to 5 per 15 minutes; every `/api/admin/*` route checks the session
+on the server. To change the password, edit the variable and restart (or redeploy on Vercel).
 
 | Page | What it does |
 | --- | --- |

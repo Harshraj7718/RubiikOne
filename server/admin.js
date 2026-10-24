@@ -1,19 +1,40 @@
 // Admin API: store overview, orders, customers, waitlist, owners-wall moderation and the media library.
-// Every route requires a signed-in user whose email is listed in ADMIN_EMAILS.
+// Access uses one admin username and password (ADMIN_USERNAME / ADMIN_PASSWORD in the environment),
+// separate from customer accounts. A successful login gets its own short-lived, httpOnly session cookie.
 import path from "node:path";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import express from "express";
 import { LAUNCH, PRODUCTS } from "../src/data/catalog.js";
+import { readCookie } from "./auth.js";
 
-const adminEmails = () =>
-  new Set(
-    String(process.env.ADMIN_EMAILS ?? "")
-      .split(",")
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean),
-  );
-export const isAdmin = (user) => Boolean(user && adminEmails().has(user.email));
+const ADMIN_COOKIE = "rbk_admin";
+const ADMIN_SESSION_HOURS = 12;
+const sha256 = (s) => createHash("sha256").update(String(s)).digest();
+// Compares fixed-length digests so the check takes the same time whatever was typed.
+const sameSecret = (given, expected) => timingSafeEqual(sha256(given), sha256(expected));
+const adminConfigured = () => Boolean(process.env.ADMIN_USERNAME && process.env.ADMIN_PASSWORD);
+
+/** At most `max` attempts per key in each window. */
+function createLimiter({ max, windowMs }) {
+  const hits = new Map();
+  return (key) => {
+    const now = Date.now();
+    const entry = hits.get(key);
+    if (!entry || now - entry.start > windowMs) {
+      hits.set(key, { start: now, count: 1 });
+      return true;
+    }
+    entry.count += 1;
+    return entry.count <= max;
+  };
+}
+
+function setAdminCookie(res, token, maxAgeSeconds) {
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  res.setHeader("Set-Cookie", `${ADMIN_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAgeSeconds}${secure}`);
+}
 
 const IMAGE = /\.(webp|png|jpe?g|svg|gif|avif)$/i;
 // Cells starting with these could run as formulas when a CSV is opened in a spreadsheet.
@@ -30,18 +51,52 @@ const shortName = (name = "") => {
   return last ? `${first} ${last[0].toUpperCase()}.` : first ?? "";
 };
 
-export function mountAdmin(app, { users, orders, waitlist }, { currentUser, root }) {
+export function mountAdmin(app, { users, orders, waitlist, sessions }, { root }) {
+  const limitLogin = createLimiter({ max: 5, windowMs: 15 * 60 * 1000 });
+
+  /** The signed-in admin for this request, or null. Admin sessions live in `sessions` with admin: true. */
+  async function currentAdmin(req) {
+    const token = readCookie(req, ADMIN_COOKIE);
+    if (!token) return null;
+    const session = await sessions.findOne({ hash: sha256(token).toString("hex"), admin: true, expiresAt: { $gt: new Date() } });
+    return session ? { username: session.username } : null;
+  }
+
   async function requireAdmin(req, res, next) {
     try {
-      const user = await currentUser(req);
-      if (!user) return res.status(401).json({ error: "Please sign in." });
-      if (!isAdmin(user)) return res.status(403).json({ error: "This account doesn't have admin access." });
-      req.user = user;
+      const admin = await currentAdmin(req);
+      if (!admin) return res.status(401).json({ error: "Please sign in as admin." });
+      req.admin = admin;
       next();
     } catch (err) {
       next(err);
     }
   }
+
+  app.post("/api/admin/login", async (req, res) => {
+    if (!adminConfigured()) return res.status(503).json({ error: "Admin login isn't set up. Add ADMIN_USERNAME and ADMIN_PASSWORD to the server environment." });
+    if (!limitLogin(req.ip)) return res.status(429).json({ error: "Too many attempts. Please wait 15 minutes and try again." });
+    const username = String(req.body?.username ?? "");
+    const password = String(req.body?.password ?? "");
+    // Check both, always, so a wrong username and a wrong password look the same.
+    const ok = sameSecret(username, process.env.ADMIN_USERNAME) & sameSecret(password, process.env.ADMIN_PASSWORD);
+    if (!ok) return res.status(401).json({ error: "That username and password don't match." });
+    const token = randomBytes(32).toString("base64url");
+    await sessions.insertOne({ hash: sha256(token).toString("hex"), admin: true, username: process.env.ADMIN_USERNAME, expiresAt: new Date(Date.now() + ADMIN_SESSION_HOURS * 3600000) });
+    setAdminCookie(res, token, ADMIN_SESSION_HOURS * 3600);
+    res.json({ admin: { username: process.env.ADMIN_USERNAME } });
+  });
+
+  app.post("/api/admin/logout", async (req, res) => {
+    const token = readCookie(req, ADMIN_COOKIE);
+    if (token) await sessions.deleteOne({ hash: sha256(token).toString("hex"), admin: true });
+    setAdminCookie(res, "", 0);
+    res.json({ ok: true });
+  });
+
+  app.get("/api/admin/me", async (req, res) => {
+    res.json({ admin: await currentAdmin(req), configured: adminConfigured() });
+  });
 
   // An unpaid order whose hold has lapsed is reported as expired.
   const effectiveStatus = (o, now = Date.now()) => (o.status === "pending_payment" && new Date(o.holdUntil).getTime() <= now ? "expired" : o.status);
@@ -149,7 +204,6 @@ export function mountAdmin(app, { users, orders, waitlist }, { currentUser, root
           name: u.name,
           email: u.email,
           createdAt: u.createdAt,
-          admin: isAdmin(u),
           orders: mine.length,
           pieces: paid.reduce((n, o) => n + o.items.reduce((m, i) => m + i.qty, 0), 0),
           spent: paid.reduce((n, o) => n + o.subtotal, 0),
