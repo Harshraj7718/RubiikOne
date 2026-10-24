@@ -14,7 +14,7 @@ export default function Collection() {
   const [idx, setIdx] = useState(0);
   useMotionValueEvent(scrollYProgress, "change", (v) => setIdx(v < 0.5 ? 0 : 1));
 
-  const bg = useTransform(scrollYProgress, [0.35, 0.65], ["#101413", "#141a0b"]);
+  const bg = useTransform(scrollYProgress, [0.35, 0.65], ["#070C11", "#4D0002"]);
   const glow = useTransform(scrollYProgress, [0.35, 0.65], ["rgba(141,144,148,0.22)", "rgba(138,154,58,0.28)"]);
   const watchRotate = useTransform(scrollYProgress, [0, 0.5, 1], [-8, 0, 8]);
   const watchY = useTransform(scrollYProgress, [0, 1], [40, -40]);
@@ -25,7 +25,7 @@ export default function Collection() {
   const p = PRODUCTS[idx];
 
   return (
-    <section id="collection" className="relative">
+    <section id="collection" className="relative isolate">
       <div className="mx-auto max-w-[1600px] px-5 pb-20 pt-28 sm:px-10 sm:pt-40">
         <Chapter n="IV" title="The signature collection" className="mb-6" />
         <h2 className="font-serif text-6xl leading-none sm:text-[9vw]">
@@ -90,7 +90,7 @@ export default function Collection() {
                     y1="2"
                     x2="100"
                     y2={i % 10 === 0 ? 8 : 4}
-                    stroke={i % 10 === 0 ? "#c9a464" : "rgba(239,233,223,0.18)"}
+                    stroke={i % 10 === 0 ? "#c9a464" : "rgba(249,249,249,0.18)"}
                     strokeWidth={i % 10 === 0 ? 0.5 : 0.25}
                     transform={`rotate(${i * 3} 100 100)`}
                   />

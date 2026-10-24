@@ -4,8 +4,8 @@
 
 @layer base {
   html {
-    background: #07110d;
-    color: #efe9df;
+    background: #0B1219;
+    color: #F9F9F9;
     -webkit-font-smoothing: antialiased;
     overflow-x: clip;
   }
@@ -16,7 +16,7 @@
   }
   ::selection {
     background: #c9a464;
-    color: #07110d;
+    color: #070C11;
   }
   html.lenis, html.lenis body { height: auto; }
   .lenis.lenis-smooth { scroll-behavior: auto !important; }
@@ -97,7 +97,7 @@
     content: "";
     position: absolute;
     inset: 4px;
-    border: 1px solid rgba(7, 17, 13, 0.25);
+    border: 1px solid rgba(7, 12, 17, 0.3);
     pointer-events: none;
   }
   .btn-gold:hover { background-position: 100% 100%; }

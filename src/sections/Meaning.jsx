@@ -32,7 +32,7 @@ export default function Meaning() {
   };
 
   return (
-    <section id="meaning" ref={ref} className="relative bg-night-800" style={{ height: `${(FINALE + 1) * 70 + 30}vh` }}>
+    <section id="meaning" ref={ref} className="relative bg-wine-900" style={{ height: `${(FINALE + 1) * 70 + 30}vh` }}>
       <div className="sticky top-0 flex h-screen flex-col overflow-hidden">
         <div className="damask pointer-events-none absolute inset-0 opacity-[0.05]" />
         {/* Soft gold light that follows the lit letter */}

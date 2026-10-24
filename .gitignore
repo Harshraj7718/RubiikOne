@@ -2,3 +2,7 @@ node_modules
 dist
 server/data
 *.log
+# Secrets (database connection string, payment keys)
+.env
+.env.*
+!.env.example

@@ -10,6 +10,7 @@ import Footer from "./components/Footer.jsx";
 import Home from "./pages/Home.jsx";
 import Product from "./pages/Product.jsx";
 import Checkout from "./pages/Checkout.jsx";
+import Account from "./pages/Account.jsx";
 import { useShop } from "./lib/shop.jsx";
 
 let lenis;
@@ -84,6 +85,7 @@ export default function App() {
             <Route path="/" element={<Home ready={loaded} />} />
             <Route path="/watch/:slug" element={<Product />} />
             <Route path="/checkout" element={<Checkout />} />
+            <Route path="/account" element={<Account />} />
             <Route path="*" element={<Home ready={loaded} />} />
           </Routes>
         </motion.main>

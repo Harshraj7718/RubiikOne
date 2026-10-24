@@ -2,7 +2,7 @@
 // with a single deep-red accent for berries and ribbon.
 import { motion } from "framer-motion";
 
-const BERRY = "#8e1b2c";
+const BERRY = "#A50003";
 
 /** Gold baubles hanging on threads, swinging gently. */
 export function Baubles({ className = "" }) {
@@ -47,7 +47,7 @@ function Bauble({ r, emblem }) {
       <rect x={s / 2 - 5} y="0" width="10" height="8" rx="1.5" fill="#c9a464" />
       <circle cx={s / 2} cy={r + 12} r={r} fill={`url(#bauble-${r})`} />
       <ellipse cx={s / 2} cy={r + 12} rx={r} ry={r * 0.22} fill="none" stroke="rgba(255,243,207,0.45)" strokeWidth="0.8" />
-      {emblem && <path d={`M${s / 2 - 5} ${r + 2}h2.4l-.4 20h-1.6zM${s / 2 + 2.6} ${r + 2}h2.4l-.4 20h-1.6z`} fill="rgba(5,12,9,0.55)" />}
+      {emblem && <path d={`M${s / 2 - 5} ${r + 2}h2.4l-.4 20h-1.6zM${s / 2 + 2.6} ${r + 2}h2.4l-.4 20h-1.6z`} fill="rgba(7,12,17,0.55)" />}
       <circle cx={s / 2 - r * 0.38} cy={r + 12 - r * 0.4} r={r * 0.18} fill="rgba(255,255,255,0.55)" />
     </svg>
   );
@@ -98,7 +98,7 @@ export function GiftRibbon({ label = "Christmas launch" }) {
     <div className="pointer-events-none absolute right-0 top-0 z-20 h-32 w-32 overflow-hidden" aria-hidden="true">
       <div
         className="absolute right-[-44px] top-[26px] w-[180px] rotate-45 py-1.5 text-center font-sans text-[9px] uppercase tracking-[0.25em] text-ivory shadow-lg"
-        style={{ background: `linear-gradient(90deg, #5e1220, ${BERRY} 50%, #5e1220)`, borderTop: "1px solid rgba(236,210,156,0.6)", borderBottom: "1px solid rgba(236,210,156,0.6)" }}
+        style={{ background: `linear-gradient(90deg, #4D0002, #A50003 50%, #4D0002)`, borderTop: "1px solid rgba(236,210,156,0.6)", borderBottom: "1px solid rgba(236,210,156,0.6)" }}
       >
         {label}
       </div>

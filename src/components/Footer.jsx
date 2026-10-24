@@ -1,10 +1,12 @@
 import { Wordmark } from "./Logo.jsx";
 import { Seal } from "./Ornament.jsx";
 import { Marquee } from "./motion.jsx";
+import { EdgeVeins } from "./GoldVeins.jsx";
 
 export default function Footer() {
   return (
-    <footer className="relative overflow-hidden border-t border-ivory/10 bg-night-900">
+    <footer className="relative isolate overflow-hidden border-t border-ivory/10 bg-night-900">
+      <EdgeVeins corners={["top-right"]} seed={53} />
       <Marquee
         className="border-b border-ivory/10 py-6 font-serif text-3xl italic text-ivory/40 sm:text-5xl"
         items={["Precision in every dimension", "Two I's. One distinctive vision", "Your time. Your perspective"]}

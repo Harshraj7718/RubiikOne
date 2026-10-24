@@ -1,50 +1,114 @@
-import { useState } from "react";
+// Pre-order flow: sign in → delivery details → payment → certificate of edition.
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useShop } from "../lib/shop.jsx";
+import { useAuth, shortName } from "../lib/auth.jsx";
 import { formatINR, LAUNCH } from "../data/catalog.js";
 import { Emblem } from "../components/Logo.jsx";
 import { ease } from "../components/motion.jsx";
+import AuthForm from "../components/AuthForm.jsx";
+import Certificate from "../components/Certificate.jsx";
 import { scrollTop } from "../App.jsx";
 
 const FIELDS = [
-  ["name", "Full name", "text", "name"],
-  ["email", "Email", "email", "email"],
   ["phone", "Mobile number", "tel", "tel"],
   ["address", "Delivery address", "text", "street-address"],
   ["city", "City", "text", "address-level2"],
   ["pincode", "PIN code", "text", "postal-code"],
 ];
 
+async function postJSON(url, body) {
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(data.error ?? "Something went wrong. Please try again."), { fields: data.fields ?? [] });
+  return data;
+}
+
+function loadRazorpay() {
+  if (window.Razorpay) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://checkout.razorpay.com/v1/checkout.js";
+    s.onload = resolve;
+    s.onerror = () => reject(new Error("Couldn't load the payment window. Please check your connection."));
+    document.body.appendChild(s);
+  });
+}
+
 export default function Checkout() {
   const { cart, subtotal, compareTotal, phase, clear, refreshStatus } = useShop();
-  const [form, setForm] = useState({ name: "", email: "", phone: "", address: "", city: "", pincode: "" });
-  const [state, setState] = useState({ status: "idle", error: "", fields: [] });
-  const [order, setOrder] = useState(null);
+  const { user, ready, logout } = useAuth();
+  const [form, setForm] = useState({ phone: "", address: "", city: "", pincode: "" });
+  const [wall, setWall] = useState({ show: true, displayName: "" });
+  const [state, setState] = useState({ busy: false, error: "", fields: [] });
+  const [pending, setPending] = useState(null); // { order, payment } awaiting payment
+  const [paid, setPaid] = useState(null); // confirmed order with certificates
 
-  const submit = async (e) => {
-    e.preventDefault();
-    setState({ status: "loading", error: "", fields: [] });
+  useEffect(() => {
+    if (user) setWall((w) => ({ ...w, displayName: w.displayName || shortName(user.name) }));
+  }, [user]);
+
+  const finish = async (order, proof) => {
+    setState({ busy: true, error: "", fields: [] });
     try {
-      const res = await fetch("/api/prebook", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customer: form, items: cart.map((l) => ({ slug: l.slug, qty: l.qty })) }),
-      });
-      const data = await res.json();
-      if (!res.ok) return setState({ status: "error", error: data.error, fields: data.fields ?? [] });
-      setOrder(data.order);
-      scrollTop();
+      const data = await postJSON(`/api/orders/${order.id}/verify`, proof);
+      setPaid(data.order);
+      setPending(null);
       clear();
       refreshStatus();
-    } catch {
-      setState({ status: "error", error: "We couldn't reach the RUBIIK concierge. Please try again.", fields: [] });
+      scrollTop();
+    } catch (err) {
+      setState({ busy: false, error: err.message, fields: [] });
     }
   };
 
-  if (order) return <Confirmation order={order} />;
+  const openRazorpay = async ({ order, payment }) => {
+    try {
+      await loadRazorpay();
+      new window.Razorpay({
+        key: payment.keyId,
+        amount: payment.amount,
+        currency: payment.currency,
+        order_id: payment.providerOrderId,
+        name: "RUBIIK",
+        description: `Pre-order ${order.id}`,
+        prefill: { name: payment.name, email: payment.email, contact: payment.contact },
+        theme: { color: "#0B1219" },
+        handler: (resp) => finish(order, resp),
+        modal: { ondismiss: () => setState({ busy: false, error: "Payment was not completed. Your pieces stay held for 30 minutes.", fields: [] }) },
+      }).open();
+    } catch (err) {
+      setState({ busy: false, error: err.message, fields: [] });
+    }
+  };
 
-  if (!cart.length)
+  const submit = async (e) => {
+    e.preventDefault();
+    setState({ busy: true, error: "", fields: [] });
+    try {
+      const data = await postJSON("/api/prebook", { customer: form, wall, items: cart.map((l) => ({ slug: l.slug, qty: l.qty })) });
+      setPending(data);
+      setState({ busy: false, error: "", fields: [] });
+      scrollTop();
+      if (data.payment.provider === "razorpay") openRazorpay(data);
+    } catch (err) {
+      setState({ busy: false, error: err.message, fields: err.fields ?? [] });
+    }
+  };
+
+  if (paid) return <Confirmation order={paid} />;
+  if (!ready) return <section className="min-h-screen" />;
+
+  if (!user)
+    return (
+      <section className="mx-auto grid min-h-screen max-w-[1400px] items-center gap-16 px-5 pb-24 pt-36 sm:px-10 lg:grid-cols-[1.2fr_1fr]">
+        <AuthForm title="Sign in to reserve your piece" note="Your account keeps your certificate of edition, your serial number and your order safe." />
+        {cart.length > 0 && <Summary cart={cart} subtotal={subtotal} compareTotal={compareTotal} />}
+      </section>
+    );
+
+  if (!cart.length && !pending)
     return (
       <section className="flex min-h-screen flex-col items-center justify-center gap-6 px-5 text-center">
         <p className="font-serif text-5xl italic">Your selection is empty.</p>
@@ -56,64 +120,136 @@ export default function Checkout() {
 
   return (
     <section className="mx-auto grid min-h-screen max-w-[1400px] gap-16 px-5 pb-24 pt-36 sm:px-10 lg:grid-cols-[1.3fr_1fr]">
-      <motion.form onSubmit={submit} initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1, ease }} noValidate>
-        <p className="eyebrow text-gold">{phase === "prebook" ? "Pre-booking" : "Checkout"}</p>
-        <h1 className="mt-4 font-serif text-5xl sm:text-6xl">Reserve your RUBIIK.</h1>
-        <p className="mt-4 max-w-lg text-ivory-dim">
-          {phase === "prebook"
-            ? `Your numbered pieces are held at the pre-booking price and delivered from ${new Date(LAUNCH.launch).toLocaleDateString("en-IN", { day: "numeric", month: "long" })}. Our concierge will contact you to complete payment.`
-            : "Our concierge will contact you to complete payment and arrange insured delivery."}
-        </p>
-        <div className="mt-12 grid gap-x-8 gap-y-8 sm:grid-cols-2">
-          {FIELDS.map(([key, label, type, ac]) => (
-            <label key={key} className={key === "address" ? "sm:col-span-2" : ""}>
-              <span className={`eyebrow ${state.fields.includes(key) ? "!text-red-300" : ""}`}>{label}</span>
-              <input
-                className={`field ${state.fields.includes(key) ? "!border-red-300" : ""}`}
-                type={type}
-                autoComplete={ac}
-                inputMode={key === "pincode" ? "numeric" : undefined}
-                value={form[key]}
-                onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                required
-              />
-            </label>
-          ))}
-        </div>
-        {state.error && <p className="mt-8 text-sm text-red-300">{state.error}</p>}
-        <button className="btn-gold mt-12 w-full sm:w-auto" disabled={state.status === "loading" || phase === "teaser"}>
-          {state.status === "loading" ? "Reserving…" : `Confirm reservation · ${formatINR(subtotal)}`}
-        </button>
-      </motion.form>
+      <div className="min-w-0">
+        <Steps step={pending ? 2 : 1} />
+        <AnimatePresence mode="wait">
+          {!pending ? (
+            <motion.form key="details" onSubmit={submit} initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.8, ease }} noValidate>
+              <h1 className="mt-8 font-serif text-5xl sm:text-6xl">Reserve your RUBIIK.</h1>
+              <p className="mt-4 break-words text-ivory-dim">
+                Signed in as <span className="text-ivory">{user.name}</span> ({user.email}).{" "}
+                <button type="button" onClick={logout} className="underline decoration-gold/50 underline-offset-4 hover:text-gold">
+                  Not you?
+                </button>
+              </p>
+              <div className="mt-12 grid gap-x-8 gap-y-8 sm:grid-cols-2">
+                {FIELDS.map(([key, label, type, ac]) => (
+                  <label key={key} className={key === "address" ? "sm:col-span-2" : ""}>
+                    <span className={`eyebrow ${state.fields.includes(key) ? "!text-red-300" : ""}`}>{label}</span>
+                    <input
+                      className={`field ${state.fields.includes(key) ? "!border-red-300" : ""}`}
+                      type={type}
+                      autoComplete={ac}
+                      inputMode={key === "pincode" ? "numeric" : undefined}
+                      value={form[key]}
+                      onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                      required
+                    />
+                  </label>
+                ))}
+              </div>
 
-      <motion.aside
-        className="frame-royal h-fit bg-night-800 p-8 lg:sticky lg:top-28"
-        initial={{ opacity: 0, x: 30 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 1, ease, delay: 0.15 }}
-      >
-        <p className="eyebrow text-ivory">Summary</p>
-        {cart.map((l) => (
-          <div key={l.slug} className="flex items-center gap-4 border-b border-ivory/10 py-5">
-            <img src={l.product.images.cutout} alt="" className="h-20" />
-            <div className="flex-1">
-              <p className="font-serif text-xl">{l.product.edition}</p>
-              <p className="eyebrow">Qty {l.qty}</p>
-            </div>
-            <p>{formatINR(l.unit * l.qty)}</p>
-          </div>
-        ))}
-        <div className="mt-6 space-y-2 text-sm">
-          <Row label="Subtotal" value={formatINR(compareTotal)} />
-          {compareTotal > subtotal && <Row label="Pre-booking privilege (20%)" value={`− ${formatINR(compareTotal - subtotal)}`} gold />}
-          <Row label="Insured delivery" value="Complimentary" />
-        </div>
-        <div className="mt-6 flex items-baseline justify-between border-t border-ivory/10 pt-6">
-          <span className="eyebrow text-ivory">Total</span>
-          <span className="font-serif text-4xl">{formatINR(subtotal)}</span>
-        </div>
-      </motion.aside>
+              {/* Founding Owners wall: opt-in, with the name the owner chooses */}
+              <div className="frame-royal mt-12 bg-night-800/60 p-6">
+                <label className="flex cursor-pointer items-start gap-4">
+                  <input type="checkbox" checked={wall.show} onChange={(e) => setWall((w) => ({ ...w, show: e.target.checked }))} className="mt-1 h-4 w-4 accent-[#c9a464]" />
+                  <span>
+                    <span className="block font-serif text-xl">Show my certificate on the Founding Owners wall</span>
+                    <span className="mt-1 block text-sm text-ivory-dim">Your card appears on the home page with the name below. Your email, phone and address are never shown.</span>
+                  </span>
+                </label>
+                {wall.show && (
+                  <label className="mt-5 block pl-8">
+                    <span className={`eyebrow ${state.fields.includes("displayName") ? "!text-red-300" : ""}`}>Name on the wall</span>
+                    <input className="field" value={wall.displayName} maxLength={40} onChange={(e) => setWall((w) => ({ ...w, displayName: e.target.value }))} />
+                  </label>
+                )}
+              </div>
+
+              {state.error && <p className="mt-8 text-sm text-red-300">{state.error}</p>}
+              <button className="btn-gold mt-10 w-full sm:w-auto" disabled={state.busy || phase === "teaser"}>
+                {state.busy ? "Reserving…" : `Continue to payment · ${formatINR(subtotal)}`}
+              </button>
+            </motion.form>
+          ) : (
+            <Payment key="pay" pending={pending} busy={state.busy} error={state.error} onTestPay={() => finish(pending.order, { test: true })} onRazorpay={() => openRazorpay(pending)} />
+          )}
+        </AnimatePresence>
+      </div>
+
+      <Summary cart={pending ? pending.order.items.map((i) => ({ ...i, product: null })) : cart} subtotal={pending ? pending.order.subtotal : subtotal} compareTotal={pending ? pending.order.compareAt : compareTotal} />
     </section>
+  );
+}
+
+function Steps({ step }) {
+  const labels = ["Details", "Payment", "Certificate"];
+  return (
+    <ol className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[9px] uppercase tracking-[0.2em] sm:justify-start sm:gap-x-3 sm:text-[10px] sm:tracking-[0.25em]">
+      {labels.map((l, i) => (
+        <li key={l} className={`flex items-center gap-2 sm:gap-3 ${i + 1 <= step ? "text-gold" : "text-ivory-mute"}`}>
+          <span className={`flex h-5 w-5 items-center justify-center border ${i + 1 <= step ? "border-gold" : "border-ivory/20"}`}>{i + 1}</span>
+          {l}
+          {i < labels.length - 1 && <span className="hidden h-px w-6 bg-ivory/20 sm:block" />}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function Payment({ pending, busy, error, onTestPay, onRazorpay }) {
+  const { order, payment } = pending;
+  const holdUntil = new Date(order.holdUntil).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+  return (
+    <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.8, ease }}>
+      <h1 className="mt-8 font-serif text-5xl sm:text-6xl">Complete your payment.</h1>
+      <p className="mt-4 max-w-lg text-ivory-dim">
+        Order <span className="text-ivory">{order.id}</span>. Your pieces are held for you until {holdUntil}. Your certificate and serial number are issued the moment payment completes.
+      </p>
+
+      {payment.provider === "test" ? (
+        <div className="mt-10 border border-dashed border-gold/50 bg-gold/5 p-6">
+          <p className="eyebrow text-gold">Test mode</p>
+          <p className="mt-2 text-ivory-dim">
+            No payment gateway is connected yet, so no money is charged. Add Razorpay keys to the server to take real payments. This button simulates a successful payment so you can see the full flow.
+          </p>
+          <button onClick={onTestPay} disabled={busy} className="btn-gold mt-6">
+            {busy ? "Confirming…" : `Complete test payment · ${formatINR(order.subtotal)}`}
+          </button>
+        </div>
+      ) : (
+        <button onClick={onRazorpay} disabled={busy} className="btn-gold mt-10">
+          {busy ? "Confirming…" : `Pay securely · ${formatINR(order.subtotal)}`}
+        </button>
+      )}
+      {error && <p className="mt-6 text-sm text-red-300">{error}</p>}
+    </motion.div>
+  );
+}
+
+function Summary({ cart, subtotal, compareTotal }) {
+  return (
+    <motion.aside className="frame-royal h-fit bg-night-800 p-8 lg:sticky lg:top-28" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 1, ease, delay: 0.15 }}>
+      <p className="eyebrow text-ivory">Summary</p>
+      {cart.map((l) => (
+        <div key={l.slug} className="flex items-center justify-between gap-4 border-b border-ivory/10 py-5">
+          <div>
+            <p className="font-serif text-xl">{l.product?.edition ?? l.name.replace("RUBIIK ONE ", "")}</p>
+            <p className="eyebrow">Qty {l.qty}</p>
+          </div>
+          <p>{formatINR((l.unit ?? l.unitPrice) * l.qty)}</p>
+        </div>
+      ))}
+      <div className="mt-6 space-y-2 text-sm">
+        <Row label="Subtotal" value={formatINR(compareTotal)} />
+        {compareTotal > subtotal && <Row label="Pre-booking privilege (20%)" value={`− ${formatINR(compareTotal - subtotal)}`} gold />}
+        <Row label="Insured delivery" value="Complimentary" />
+      </div>
+      <div className="mt-6 flex items-baseline justify-between border-t border-ivory/10 pt-6">
+        <span className="eyebrow text-ivory">Total</span>
+        <span className="font-serif text-4xl">{formatINR(subtotal)}</span>
+      </div>
+    </motion.aside>
   );
 }
 
@@ -128,32 +264,37 @@ function Row({ label, value, gold }) {
 
 function Confirmation({ order }) {
   return (
-    <section className="flex min-h-screen items-center justify-center px-5 py-32">
-      <motion.div className="max-w-xl text-center" initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1.2, ease }}>
-        <motion.div initial={{ scaleY: 0 }} animate={{ scaleY: 1 }} transition={{ duration: 1.2, ease, delay: 0.3 }} style={{ originY: 0 }} className="mx-auto w-fit">
-          <Emblem className="h-20" />
+    <section className="px-5 pb-28 pt-36 sm:px-10">
+      <motion.div className="mx-auto max-w-3xl text-center" initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1.2, ease }}>
+        <Steps step={3} />
+        <motion.div initial={{ scaleY: 0 }} animate={{ scaleY: 1 }} transition={{ duration: 1.2, ease, delay: 0.3 }} style={{ originY: 0 }} className="mx-auto mt-10 w-fit">
+          <Emblem className="h-16" />
         </motion.div>
-        <p className="eyebrow mt-10 text-gold">Reservation {order.id}</p>
-        <h1 className="mt-4 font-serif text-5xl sm:text-6xl">Thank you, {order.customer.name.split(" ")[0]}.</h1>
-        <p className="mt-6 text-lg text-ivory-dim">
-          Your RUBIIK is reserved. A confirmation has been noted for {order.customer.email}; our concierge will contact you shortly to complete payment.
+        <p className="eyebrow mt-8 text-gold">Payment received · {order.id}</p>
+        <h1 className="mt-4 font-serif text-5xl sm:text-6xl">Welcome, {order.customer.name.split(" ")[0]}.</h1>
+        <p className="mx-auto mt-5 max-w-xl text-lg text-ivory-dim">
+          {order.certificates.length > 1 ? "Your pieces are" : "Your piece is"} officially part of the edition. Delivery follows the launch on{" "}
+          {new Date(LAUNCH.launch).toLocaleDateString("en-IN", { day: "numeric", month: "long" })}.
+          {order.wall?.show ? ` Your card now appears on the Founding Owners wall as “${order.wall.displayName}”.` : ""}
         </p>
-        <div className="frame-royal mt-10 space-y-3 p-6 text-left">
-          {order.items.map((i) => (
-            <div key={i.slug} className="flex justify-between gap-4">
-              <span className="font-serif text-xl">{i.name}</span>
-              <span className="eyebrow text-gold">No. {i.editionNumbers.map((n) => String(n).padStart(3, "0")).join(", ")} / 200</span>
-            </div>
-          ))}
-          <div className="flex justify-between border-t border-ivory/10 pt-3">
-            <span className="eyebrow text-ivory">Total</span>
-            <span className="font-serif text-2xl">{formatINR(order.subtotal)}</span>
-          </div>
-        </div>
-        <Link to="/" className="btn-ghost mt-10">
-          Return to RUBIIK
-        </Link>
       </motion.div>
+
+      <div className="mx-auto mt-14 grid max-w-5xl gap-10">
+        {order.certificates.map((c, i) => (
+          <motion.div key={c.serial} initial={{ opacity: 0, y: 60, rotateX: 25 }} animate={{ opacity: 1, y: 0, rotateX: 0 }} transition={{ duration: 1.3, ease, delay: 0.5 + i * 0.25 }} style={{ transformPerspective: 1200 }}>
+            <Certificate cert={c} name={c.ownerName} size="lg" />
+          </motion.div>
+        ))}
+      </div>
+
+      <div className="mt-14 flex flex-wrap justify-center gap-4">
+        <Link to="/account" className="btn-gold">
+          View my collection
+        </Link>
+        <Link to="/#owners" className="btn-ghost">
+          See the owners wall
+        </Link>
+      </div>
     </section>
   );
 }

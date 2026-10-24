@@ -43,7 +43,7 @@ export default function Loader({ onDone }) {
       initial={{ clipPath: "inset(0 0 0% 0)" }}
     >
       <svg viewBox="0 0 200 200" className="absolute h-[78vmin] w-[78vmin] -rotate-90">
-        <circle cx="100" cy="100" r="96" fill="none" stroke="rgba(239,233,223,0.08)" strokeWidth="0.4" />
+        <circle cx="100" cy="100" r="96" fill="none" stroke="rgba(249,249,249,0.08)" strokeWidth="0.4" />
         <motion.circle
           cx="100"
           cy="100"
@@ -62,7 +62,7 @@ export default function Loader({ onDone }) {
             y1={i % 5 === 0 ? 8 : 6}
             x2="100"
             y2="4"
-            stroke="rgba(239,233,223,0.25)"
+            stroke="rgba(249,249,249,0.25)"
             strokeWidth={i % 5 === 0 ? 0.5 : 0.25}
             transform={`rotate(${i * 6} 100 100)`}
           />

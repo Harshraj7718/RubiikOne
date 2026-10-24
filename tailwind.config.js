@@ -4,8 +4,10 @@ export default {
   theme: {
     extend: {
       colors: {
-        night: { DEFAULT: "#07110d", 900: "#050c09", 800: "#0b1a14", 700: "#10241b", 600: "#173327" },
-        ivory: { DEFAULT: "#efe9df", dim: "#b9b3a8", mute: "#7d8a84" },
+        // Theme: ink #0B1219, crimson #A50003 and near-white #F9F9F9; gold stays as the metallic accent.
+        night: { DEFAULT: "#0B1219", 900: "#070C11", 800: "#0E1720", 700: "#141F2A", 600: "#1C2935" },
+        ivory: { DEFAULT: "#F9F9F9", dim: "#C9CBCE", mute: "#8A9099" },
+        wine: { DEFAULT: "#A50003", 900: "#2A0001", 800: "#4D0002", 700: "#7A0002", 600: "#A50003" },
         gold: { light: "#ecd29c", DEFAULT: "#c9a464", deep: "#8c6a35" },
         olive: { DEFAULT: "#5c6b1f", light: "#8a9a3a" },
         gunmetal: { DEFAULT: "#5a5c5f", light: "#8d9094" },

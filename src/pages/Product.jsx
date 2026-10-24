@@ -4,6 +4,7 @@ import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion"
 import { findProduct, PRODUCTS, formatINR, unitPrice, LAUNCH } from "../data/catalog.js";
 import { useShop, MAX_PER_MODEL } from "../lib/shop.jsx";
 import { SplitReveal, FadeUp, Magnetic, ParallaxImage, ease } from "../components/motion.jsx";
+import { EdgeVeins } from "../components/GoldVeins.jsx";
 
 export default function Product() {
   const { slug } = useParams();
@@ -24,7 +25,8 @@ export default function Product() {
 
   return (
     <div key={p.slug}>
-      <section ref={ref} className="grain relative min-h-screen overflow-hidden pt-28">
+      <section ref={ref} className="grain relative isolate min-h-screen overflow-hidden pt-28">
+        <EdgeVeins corners={["top-left","bottom-right"]} seed={71} />
         <motion.p
           style={{ x: nameX }}
           className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 whitespace-nowrap font-serif text-[22vw] uppercase leading-none text-ivory/[0.04]"
@@ -167,7 +169,7 @@ export default function Product() {
       </section>
 
       {/* Other model */}
-      <section className="border-t border-ivory/10 py-24">
+      <section className="relative isolate overflow-hidden border-t border-ivory/10 py-24">
         <Link to={`/watch/${other.slug}`} className="group mx-auto flex max-w-[1600px] flex-col items-center gap-6 px-5 text-center sm:px-10" data-cursor="Next">
           <p className="eyebrow">Also in the edition</p>
           <img src={other.images.cutout} alt="" className="h-64 transition-transform duration-[1.2s] ease-lux group-hover:-translate-y-4 group-hover:rotate-6" />

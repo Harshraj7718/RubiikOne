@@ -17,7 +17,7 @@ export default function Vision() {
   const barsScale = useTransform(scrollYProgress, [0.15, 0.5], [0, 1]);
 
   return (
-    <section ref={ref} className="relative overflow-hidden py-28 sm:py-44">
+    <section ref={ref} className="relative isolate overflow-hidden py-28 sm:py-44">
       <div className="mx-auto grid max-w-[1600px] gap-16 px-5 sm:px-10 lg:grid-cols-2">
         <div className="relative h-[70vh] min-h-[520px]">
           <ParallaxImage

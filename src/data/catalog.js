@@ -14,6 +14,7 @@ export const LAUNCH = {
 export const PRODUCTS = [
   {
     slug: "rubiik-one-automatic",
+    code: "AS", // used in serial numbers, e.g. RBK-AS-017-7F3C
     name: "RUBIIK ONE",
     edition: "Automatic Skeleton",
     finish: "Sandblasted Gunmetal",
@@ -47,6 +48,7 @@ export const PRODUCTS = [
   },
   {
     slug: "rubiik-one-quartz",
+    code: "QO",
     name: "RUBIIK ONE",
     edition: "Quartz Olive",
     finish: "Brushed Olive",

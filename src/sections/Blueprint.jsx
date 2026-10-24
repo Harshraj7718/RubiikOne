@@ -69,7 +69,7 @@ export default function Blueprint({ product, sky, panel, quote, attribution, pla
       {/* ---------- Typography ---------- */}
       <div className="pointer-events-none absolute inset-x-0 top-[9%] z-20 px-6 text-center">
         <motion.p
-          className="mx-auto max-w-xl font-serif text-xl uppercase leading-snug tracking-[0.12em] text-ivory [text-shadow:0_2px_14px_rgba(5,12,9,0.9)] sm:text-3xl"
+          className="mx-auto max-w-xl font-serif text-xl uppercase leading-snug tracking-[0.12em] text-ivory [text-shadow:0_2px_14px_rgba(7,12,17,0.9)] sm:text-3xl"
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}

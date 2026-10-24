@@ -7,11 +7,29 @@ React 18 + Vite, Tailwind CSS, Framer Motion, Lenis smooth scroll, and a Node/Ex
 
 ```bash
 npm install
+cp .env.example .env   # then put your MongoDB connection string in .env
 npm run dev        # site on http://localhost:5173, API on :8787 — uses the real launch dates
 npm run dev:open   # same, but forces pre-booking open so you can test the checkout today
 ```
 
+The scripts load `.env` automatically (`node --env-file-if-exists=.env`). `.env` is git-ignored; never commit it.
+
+## Database (MongoDB)
+
+All data lives in MongoDB: `users`, `sessions` (auto-expire), `orders`, `waitlist` and `meta` (edition counter, serial key).
+The server connects at startup and creates the indexes it needs.
+
+| Variable | Purpose |
+| --- | --- |
+| `MONGODB_URI` | Connection string (required) |
+| `MONGODB_DB` | Database name on the cluster (default `rubiik`, kept separate from other apps' data) |
+| `MONGODB_DNS` | Optional DNS servers for the `mongodb+srv` lookup if the system resolver refuses SRV queries (default fallback `1.1.1.1,8.8.8.8`) |
+
+Reservations and payment confirmations run in transactions that all touch one edition document, so concurrent buyers
+can never over-sell the edition or receive the same number. In Atlas, allow your server's IP under **Network Access**.
+
 Production: `npm run build` then `npm start` (Express serves `dist/` and the API on `API_PORT`, default 8787).
+Set `NODE_ENV=production` there so session cookies are marked `Secure`.
 
 ## Edition rules (edit in `src/data/catalog.js`)
 
@@ -24,18 +42,38 @@ Production: `npm run build` then `npm start` (Express serves `dist/` and the API
 | Limit | 2 per model per order |
 
 Phases are decided by the server: **teaser** (before 6 Nov: countdown + "Notify me" waitlist),
-**prebook** (6 Nov – 24 Dec: discounted reservations), **launched** (full price).
-Prices and stock are always recomputed on the server; each reserved piece gets the next number in the shared edition (e.g. 017/200), whichever model it is.
+**prebook** (6 Nov – 24 Dec: discounted pre-orders), **launched** (full price).
+Prices and stock are always recomputed on the server.
+
+## Pre-order flow
+
+1. **Sign in** — customers create an account or sign in before pre-ordering (passwords hashed with scrypt; sessions in an httpOnly cookie).
+2. **Details** — delivery address, plus an opt-in to appear on the Founding Owners wall under a display name they choose.
+3. **Payment** — the order holds its pieces for 30 minutes while payment completes.
+4. **Certificate of Edition** — once payment is verified, each watch gets the next number in the shared edition and a serial such as `RBK-AS-017-7F3C` (model code, number, keyed check code). Customers see their certificates on `/account`.
+
+The **Founding Owners wall** (right after the hero) shows certificates of owners who opted in, with only their chosen display name.
+
+### Payments
+
+| Environment variable | Purpose |
+| --- | --- |
+| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | Enables real Razorpay Checkout; every payment is verified by its signature |
+| `SERIAL_SECRET` | Key for serial check codes (optional; otherwise one is generated and kept in the data file) |
+
+Without the Razorpay keys the store runs in **test mode**: the payment step is clearly labelled and simulates a successful payment, so no money is ever charged.
 
 ## Where things live
 
-- `src/sections/` — home page sections (Hero, Manifesto, Meaning, Vision, Collection, Gallery, Details, Experience, Limited, PreBook, Finale)
-- `src/pages/` — product detail and checkout/confirmation
+- `src/sections/` — home page sections (Hero, Owners, Manifesto, Meaning, Vision, Collection, Gallery, Blueprint, Details, Experience, Limited, PreBook, Finale)
+- `src/pages/` — product detail, checkout (sign in → details → payment → certificate) and account
+- `src/components/Certificate.jsx` — the owner's certificate card
 - `src/components/motion.jsx` — split-text reveals, scroll-scrubbed words, parallax, magnetic and tilt hovers
-- `server/` — API (`/api/status`, `/api/waitlist`, `/api/prebook`); orders and waitlist are stored in `server/data/db.json`
+- `server/` — API: `index.js` (status, waitlist, pre-orders, verification, owners wall), `auth.js` (accounts and sessions), `payments.js` (Razorpay / test mode), `db.js` (MongoDB connection and indexes)
 - `brand-source/` — original brand images; `npm run images` regenerates the cut-outs and section crops in `public/images/`
 
 ## Before going live
 
-- Payment is not collected: reservations are recorded and the concierge follows up. Add a gateway (e.g. Razorpay) in `/api/prebook`.
-- Replace the JSON file store with a database, and add order/waitlist email notifications.
+- Add your Razorpay keys (see above) and test a real payment end to end.
+- Add order/waitlist email notifications.
+- Add a password-reset flow (accounts currently have sign-in and sign-up only).

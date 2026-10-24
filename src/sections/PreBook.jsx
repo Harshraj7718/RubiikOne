@@ -24,10 +24,10 @@ export default function PreBook() {
   ];
 
   return (
-    <section id="prebook" className="relative overflow-hidden bg-night-800 py-28 sm:py-40">
+    <section id="prebook" className="relative overflow-hidden bg-wine-800 py-28 sm:py-40">
       <div className="damask pointer-events-none absolute inset-0 opacity-[0.05]" />
       {/* Christmas: soft snowfall, warm glow and hanging baubles */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[70%] bg-[radial-gradient(ellipse_at_top,rgba(142,27,44,0.18),transparent_65%)]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[70%] bg-[radial-gradient(ellipse_at_top,rgba(165,0,3,0.55),transparent_65%)]" />
       <Particles mode="snow" density={0.8} />
       <Baubles className="hidden sm:block" />
       <div className="relative mx-auto max-w-[1600px] px-5 sm:px-10">
@@ -85,7 +85,7 @@ export default function PreBook() {
               [t.minutes, "Minutes"],
               [t.seconds, "Seconds"],
             ].map(([v, l]) => (
-              <div key={l} className="frame-royal flex w-1/4 flex-col items-center bg-night/50 py-6">
+              <div key={l} className="frame-royal flex w-1/4 flex-col items-center bg-wine-900/60 py-6">
                 <AnimatePresence mode="popLayout">
                   <motion.span
                     key={v}
@@ -114,7 +114,7 @@ export default function PreBook() {
                 // Christmas Day is marked with the star rather than a diamond.
                 <Star className="relative z-10 mx-auto -mt-4 h-12 w-12" />
               ) : (
-                <span className={`relative z-10 mx-auto block h-4 w-4 rotate-45 border ${s.active ? "bg-gold border-gold" : "border-gold/60 bg-night-800"}`}>
+                <span className={`relative z-10 mx-auto block h-4 w-4 rotate-45 border ${s.active ? "bg-gold border-gold" : "border-gold/60 bg-wine-800"}`}>
                   {s.active && <span className="bg-gold absolute inset-0 animate-ping opacity-60" />}
                 </span>
               )}

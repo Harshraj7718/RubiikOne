@@ -3,6 +3,7 @@ import { useRef } from "react";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { SplitReveal, FadeUp } from "../components/motion.jsx";
 import { Chapter } from "../components/Ornament.jsx";
+import { EdgeVeins } from "../components/GoldVeins.jsx";
 
 export default function Experience() {
   const ref = useRef(null);
@@ -13,7 +14,8 @@ export default function Experience() {
   const yB = useTransform(scrollYProgress, [0, 1], [-60, 160]);
 
   return (
-    <section ref={ref} className="relative overflow-hidden py-28 sm:py-44">
+    <section ref={ref} className="relative isolate overflow-hidden py-28 sm:py-44">
+      <EdgeVeins corners={["top-left","bottom-right"]} seed={31} />
       <div className="mx-auto grid max-w-[1600px] items-center gap-20 px-5 sm:px-10 lg:grid-cols-2">
         <div>
           <Chapter n="VII" title="The RUBIIK experience" className="mb-6" />

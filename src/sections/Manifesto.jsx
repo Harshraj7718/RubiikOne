@@ -3,6 +3,7 @@ import { useRef } from "react";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { ScrubWords } from "../components/motion.jsx";
 import { Chapter } from "../components/Ornament.jsx";
+import { EdgeVeins } from "../components/GoldVeins.jsx";
 
 const LINES = [
   { text: "Precision", from: "-30%", to: "8%", className: "text-ivory/25" },
@@ -15,7 +16,8 @@ export default function Manifesto() {
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
 
   return (
-    <section id="philosophy" className="relative overflow-hidden py-32 sm:py-48">
+    <section id="philosophy" className="relative isolate overflow-hidden py-32 sm:py-48">
+      <EdgeVeins corners={["top-left","bottom-right"]} seed={11} />
       <div ref={ref} className="flex flex-col gap-2 font-serif text-[17vw] uppercase leading-[0.85] tracking-tight sm:text-[13vw]">
         {LINES.map((l, i) => (
           <Line key={i} progress={scrollYProgress} {...l} align={i % 2 ? "self-end pr-[4vw]" : "self-start pl-[4vw]"} />

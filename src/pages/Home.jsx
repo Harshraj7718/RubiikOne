@@ -1,4 +1,5 @@
 import Hero from "../sections/Hero.jsx";
+import Owners from "../sections/Owners.jsx";
 import Manifesto from "../sections/Manifesto.jsx";
 import Meaning from "../sections/Meaning.jsx";
 import Vision from "../sections/Vision.jsx";
@@ -19,6 +20,7 @@ export default function Home({ ready }) {
   return (
     <>
       <Hero ready={ready} />
+      <Owners />
       <Marquee
         className="border-y border-ivory/10 py-5 font-sans text-[12px] uppercase tracking-mega text-ivory/60"
         items={["Limited to 200 pieces", "Pre-booking from 6 November · 20% off", "Launching 25 December", "Every second has a shape"]}
@@ -31,7 +33,7 @@ export default function Home({ ready }) {
       <Blueprint
         product={AUTOMATIC}
         sky="/images/sky-desert.webp"
-        panel="linear-gradient(180deg, #1a2420 0%, #0f1714 100%)"
+        panel="linear-gradient(180deg, #141F2A 0%, #070C11 100%)"
         quote="Time is universal, but every person experiences it differently."
         attribution="The RUBIIK philosophy"
         place={["The dune sea", "Golden hour", "Water resistant 5 ATM"]}
@@ -42,7 +44,7 @@ export default function Home({ ready }) {
       <Blueprint
         product={QUARTZ}
         sky="/images/sky-coast.webp"
-        panel="linear-gradient(180deg, #252c14 0%, #161b0c 100%)"
+        panel="linear-gradient(180deg, #A50003 0%, #4D0002 100%)"
         quote="Every line has intention. Every angle has purpose."
         attribution="The RUBIIK design code"
         place={["The coastline", "At dusk", "Japanese quartz"]}

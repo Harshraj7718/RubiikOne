@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence, useScroll, useMotionValueEvent } from "framer-motion";
 import Logo from "./Logo.jsx";
 import { useShop } from "../lib/shop.jsx";
+import { useAuth } from "../lib/auth.jsx";
 import { scrollToId } from "../App.jsx";
 import { ease } from "./motion.jsx";
 
@@ -16,6 +17,7 @@ const LINKS = [
 
 export default function Nav() {
   const { count, setCartOpen, phase } = useShop();
+  const { user } = useAuth();
   const { scrollY } = useScroll();
   const [hidden, setHidden] = useState(false);
   const [solid, setSolid] = useState(false);
@@ -68,6 +70,13 @@ export default function Nav() {
                 </NavLink>
               ))}
             </nav>
+            <Link to="/account" className="group relative" aria-label={user ? `Account: ${user.name}` : "Sign in"}>
+              <svg viewBox="0 0 24 24" className="h-5 w-5 stroke-ivory transition-colors group-hover:stroke-gold" fill="none" strokeWidth="1.2">
+                <circle cx="12" cy="8.5" r="3.5" />
+                <path d="M4.5 20c1.2-3.6 4-5.5 7.5-5.5s6.3 1.9 7.5 5.5" />
+              </svg>
+              {user && <span className="bg-gold absolute -right-1 -top-1 h-2 w-2 rounded-full" />}
+            </Link>
             <button onClick={() => setCartOpen(true)} className="group relative flex items-center gap-2" aria-label="Open selection">
               <svg viewBox="0 0 24 24" className="h-5 w-5 stroke-ivory transition-colors group-hover:stroke-gold" fill="none" strokeWidth="1.2">
                 <path d="M5 8h14l-1.2 12H6.2z M9 8V6a3 3 0 0 1 6 0v2" />

@@ -1,8 +1,9 @@
-// Lightweight canvas particles: rising gold dust ("dust") or gently falling snow ("snow").
+// Lightweight canvas particles: rising dust ("dust") or gently falling snow ("snow").
+// `tone` picks gold or white particles; snow mixes in some gold unless tone is "white".
 // Pauses when off screen and renders a still frame for reduced-motion visitors.
 import { useEffect, useRef } from "react";
 
-export default function Particles({ mode = "dust", density = 1, className = "" }) {
+export default function Particles({ mode = "dust", tone = "gold", density = 1, className = "" }) {
   const ref = useRef(null);
 
   useEffect(() => {
@@ -26,7 +27,7 @@ export default function Particles({ mode = "dust", density = 1, className = "" }
         sway: Math.random() * Math.PI * 2,
         swaySpeed: 0.004 + Math.random() * 0.01,
         tw: Math.random() * Math.PI * 2,
-        gold: snow ? Math.random() < 0.35 : true,
+        gold: tone === "white" ? false : snow ? Math.random() < 0.35 : true,
       };
     };
 
@@ -51,7 +52,7 @@ export default function Particles({ mode = "dust", density = 1, className = "" }
         const alpha = mode === "snow" ? 0.55 + Math.sin(p.tw) * 0.2 : 0.35 + Math.sin(p.tw) * 0.3;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = p.gold ? `rgba(236,210,156,${alpha})` : `rgba(239,233,223,${alpha})`;
+        ctx.fillStyle = p.gold ? `rgba(236,210,156,${alpha})` : `rgba(249,249,249,${alpha})`;
         ctx.shadowBlur = p.gold ? 6 : 3;
         ctx.shadowColor = p.gold ? "rgba(201,164,100,0.8)" : "rgba(255,255,255,0.6)";
         ctx.fill();
@@ -76,7 +77,7 @@ export default function Particles({ mode = "dust", density = 1, className = "" }
       ro.disconnect();
       io.disconnect();
     };
-  }, [mode, density]);
+  }, [mode, tone, density]);
 
   return <canvas ref={ref} className={`pointer-events-none absolute inset-0 h-full w-full ${className}`} aria-hidden="true" />;
 }
