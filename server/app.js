@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 import { randomUUID, randomBytes, createHmac } from "node:crypto";
-import { PRODUCTS, LAUNCH, findProduct, phaseAt, unitPrice } from "../src/data/catalog.js";
+import { PRODUCTS, LAUNCH, findProduct, phaseAt, unitPrice, totalsFor, formatDate } from "../src/data/catalog.js";
 import { connectDb } from "./db.js";
 import { mountAuth } from "./auth.js";
 import { mountAdmin } from "./admin.js";
@@ -96,6 +96,8 @@ export async function createApp({ serveClient = true } = {}) {
     items: o.items,
     subtotal: o.subtotal,
     compareAt: o.compareAt,
+    gst: o.gst ?? 0,
+    total: o.total ?? o.subtotal,
     customer: { name: o.customer.name, city: o.customer.city },
     wall: o.wall,
     certificates: o.certificates ?? [],
@@ -121,7 +123,7 @@ export async function createApp({ serveClient = true } = {}) {
   // Step 1: a signed-in customer reserves pieces; the order waits for payment.
   app.post("/api/prebook", requireUser, async (req, res) => {
     const current = phase();
-    if (current === "teaser") return res.status(409).json({ error: "Pre-booking opens on 6 November." });
+    if (current === "teaser") return res.status(409).json({ error: `Pre-booking opens on ${formatDate(LAUNCH.prebookOpens)}.` });
 
     const { customer = {}, items = [], wall = {} } = req.body ?? {};
     const phone = String(customer.phone ?? "").trim();
@@ -153,6 +155,7 @@ export async function createApp({ serveClient = true } = {}) {
     for (const [slug, qty] of qtyBySlug) {
       const product = findProduct(slug);
       if (qty > 2) return res.status(400).json({ error: "Each watch is limited to 2 per client." });
+      // unitPrice is before GST; GST is added on the order total below.
       lines.push({ slug, name: `${product.name} ${product.edition}`, qty, unitPrice: unitPrice(product, current) });
     }
     if (!lines.length) return res.status(400).json({ error: "Your selection is empty." });
@@ -163,6 +166,7 @@ export async function createApp({ serveClient = true } = {}) {
         const stock = await stockView({ session });
         const wanted = lines.reduce((n, l) => n + l.qty, 0);
         if (stock.remaining < wanted) throw fail(409, stock.remaining ? `Only ${stock.remaining} pieces of the edition remain.` : "The edition is fully reserved.");
+        const totals = totalsFor(lines.map((l) => ({ unit: l.unitPrice, list: findProduct(l.slug).price, qty: l.qty })));
         const doc = {
           _id: `RBK-${randomUUID().slice(0, 8).toUpperCase()}`,
           userId: req.user._id,
@@ -171,15 +175,19 @@ export async function createApp({ serveClient = true } = {}) {
           phase: current,
           customer: { name: req.user.name, email: req.user.email, phone, address, city, pincode },
           items: lines,
-          subtotal: lines.reduce((n, l) => n + l.unitPrice * l.qty, 0),
-          compareAt: lines.reduce((n, l) => n + findProduct(l.slug).price * l.qty, 0),
+          // All amounts in rupees: subtotal and compareAt before GST, total = subtotal + GST (what is charged).
+          subtotal: totals.subtotal,
+          compareAt: totals.listTotal,
+          gstRate: LAUNCH.gstRate,
+          gst: totals.gst,
+          total: totals.total,
           wall: { show: showOnWall, displayName: showOnWall ? displayName : null },
           status: "pending_payment",
         };
         await orders.insertOne(doc, { session });
         return doc;
       });
-      const payment = await startPayment({ id: order._id, subtotal: order.subtotal });
+      const payment = await startPayment({ id: order._id, amount: order.total });
       await orders.updateOne({ _id: order._id }, { $set: { payment: { provider: payment.provider, providerOrderId: payment.providerOrderId ?? null } } });
       res.status(201).json({ order: orderView(order), payment: { ...payment, name: req.user.name, email: req.user.email, contact: phone } });
     } catch (err) {

@@ -89,7 +89,6 @@ await crop("8.webp", null, "skeleton-underwater.webp");
 await crop("9.webp", null, "skeleton-cuff.webp");
 await crop("10.webp", null, "olive-silk.webp");
 await crop("16.webp", null, "skeleton-desert.webp");
-await crop("18.webp", null, "christmas-duo.webp", 2000);
 await crop("11.webp", { left: 40, top: 40, width: 1456, height: 944 }, "skeleton-compass.webp");
 await crop("12.webp", { left: 600, top: 180, width: 936, height: 844 }, "duo-flatlay.webp", 1400);
 await crop("13.webp", { left: 470, top: 640, width: 554, height: 896 }, "olive-poster-closeup.webp", 1000);

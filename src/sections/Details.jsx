@@ -6,7 +6,7 @@ import { motion, AnimatePresence, useMotionValue, useSpring } from "framer-motio
 import { SplitReveal, FadeUp, ease } from "../components/motion.jsx";
 import { Chapter, Divider } from "../components/Ornament.jsx";
 import { Emblem } from "../components/Logo.jsx";
-import { PRODUCTS, formatINR } from "../data/catalog.js";
+import { PRODUCTS, formatINR, GST_LABEL } from "../data/catalog.js";
 import { responsive } from "../lib/img.js";
 
 const [A, B] = PRODUCTS;
@@ -167,7 +167,8 @@ function Pedestal({ p, i, order, dim, onFocus }) {
         </div>
         <p className="eyebrow mt-4 !text-night/50">{p.finish}</p>
         <p className="mt-2 font-serif text-xl leading-tight sm:text-4xl">{p.edition}</p>
-        <p className="mt-2 font-serif text-sm italic text-gold-deep sm:text-lg">{formatINR(p.price)}</p>
+        <p className="mt-2 font-serif text-sm italic text-gold-deep sm:text-lg">{formatINR(p.price)} <span className="not-italic text-[0.7em] opacity-70">{GST_LABEL}</span>
+        </p>
       </Link>
     </FadeUp>
   );

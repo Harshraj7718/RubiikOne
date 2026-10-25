@@ -37,7 +37,8 @@ function loadRazorpay() {
 }
 
 export default function Checkout() {
-  const { cart, subtotal, compareTotal, phase, clear, refreshStatus } = useShop();
+  const { cart, subtotal, compareTotal, gst, total, phase, clear, refreshStatus } = useShop();
+  const cartTotals = { subtotal, compareTotal, gst, total };
   const { user, ready, logout } = useAuth();
   const [form, setForm] = useState({ phone: "", address: "", city: "", pincode: "" });
   const [wall, setWall] = useState({ show: true, displayName: "" });
@@ -104,7 +105,7 @@ export default function Checkout() {
     return (
       <section className="mx-auto grid min-h-screen max-w-[1400px] items-center gap-16 px-5 pb-24 pt-36 sm:px-10 lg:grid-cols-[1.2fr_1fr]">
         <AuthForm title="Sign in to reserve your piece" note="Your account keeps your certificate of edition, your serial number and your order safe." />
-        {cart.length > 0 && <Summary cart={cart} subtotal={subtotal} compareTotal={compareTotal} />}
+        {cart.length > 0 && <Summary cart={cart} totals={cartTotals} />}
       </section>
     );
 
@@ -167,8 +168,19 @@ export default function Checkout() {
               </div>
 
               {state.error && <p className="mt-8 text-sm text-red-300">{state.error}</p>}
-              <button className="btn-gold mt-10 w-full sm:w-auto" disabled={state.busy || phase === "teaser"}>
-                {state.busy ? "Reserving…" : `Continue to payment · ${formatINR(subtotal)}`}
+              <p className="mt-8 text-xs text-ivory-mute">
+                By continuing you agree to our{" "}
+                <Link to="/terms" className="text-ivory-dim underline underline-offset-4 hover:text-gold">
+                  Terms of Service
+                </Link>{" "}
+                and{" "}
+                <Link to="/privacy" className="text-ivory-dim underline underline-offset-4 hover:text-gold">
+                  Privacy Policy
+                </Link>
+                .
+              </p>
+              <button className="btn-gold mt-6 w-full sm:w-auto" disabled={state.busy || phase === "teaser"}>
+                {state.busy ? "Reserving…" : `Continue to payment · ${formatINR(total)}`}
               </button>
             </motion.form>
           ) : (
@@ -177,7 +189,10 @@ export default function Checkout() {
         </AnimatePresence>
       </div>
 
-      <Summary cart={pending ? pending.order.items.map((i) => ({ ...i, product: null })) : cart} subtotal={pending ? pending.order.subtotal : subtotal} compareTotal={pending ? pending.order.compareAt : compareTotal} />
+      <Summary
+        cart={pending ? pending.order.items.map((i) => ({ ...i, product: null })) : cart}
+        totals={pending ? { subtotal: pending.order.subtotal, compareTotal: pending.order.compareAt, gst: pending.order.gst, total: pending.order.total } : cartTotals}
+      />
     </section>
   );
 }
@@ -214,12 +229,12 @@ function Payment({ pending, busy, error, onTestPay, onRazorpay }) {
             No payment gateway is connected yet, so no money is charged. Add Razorpay keys to the server to take real payments. This button simulates a successful payment so you can see the full flow.
           </p>
           <button onClick={onTestPay} disabled={busy} className="btn-gold mt-6">
-            {busy ? "Confirming…" : `Complete test payment · ${formatINR(order.subtotal)}`}
+            {busy ? "Confirming…" : `Complete test payment · ${formatINR(order.total)}`}
           </button>
         </div>
       ) : (
         <button onClick={onRazorpay} disabled={busy} className="btn-gold mt-10">
-          {busy ? "Confirming…" : `Pay securely · ${formatINR(order.subtotal)}`}
+          {busy ? "Confirming…" : `Pay securely · ${formatINR(order.total)}`}
         </button>
       )}
       {error && <p className="mt-6 text-sm text-red-300">{error}</p>}
@@ -227,7 +242,7 @@ function Payment({ pending, busy, error, onTestPay, onRazorpay }) {
   );
 }
 
-function Summary({ cart, subtotal, compareTotal }) {
+function Summary({ cart, totals: { subtotal, compareTotal, gst, total } }) {
   return (
     <motion.aside className="frame-royal h-fit bg-night-800 p-8 lg:sticky lg:top-28" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 1, ease, delay: 0.15 }}>
       <p className="eyebrow text-ivory">Summary</p>
@@ -243,12 +258,14 @@ function Summary({ cart, subtotal, compareTotal }) {
       <div className="mt-6 space-y-2 text-sm">
         <Row label="Subtotal" value={formatINR(compareTotal)} />
         {compareTotal > subtotal && <Row label="Pre-booking privilege (20%)" value={`− ${formatINR(compareTotal - subtotal)}`} gold />}
+        <Row label={`GST (${Math.round(LAUNCH.gstRate * 100)}%)`} value={formatINR(gst)} />
         <Row label="Insured delivery" value="Complimentary" />
       </div>
       <div className="mt-6 flex items-baseline justify-between border-t border-ivory/10 pt-6">
         <span className="eyebrow text-ivory">Total</span>
-        <span className="font-serif text-4xl">{formatINR(subtotal)}</span>
+        <span className="font-serif text-4xl">{formatINR(total)}</span>
       </div>
+      <p className="mt-2 text-right text-xs text-ivory-mute">Inclusive of GST</p>
     </motion.aside>
   );
 }

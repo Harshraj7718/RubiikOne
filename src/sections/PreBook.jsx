@@ -1,14 +1,14 @@
-// Pre-booking: timeline (6 Nov → 25 Dec), live countdown, pricing and the two products.
+// Pre-booking: timeline (pre-booking open now → launch on 6 Nov), live countdown, pricing and the two products.
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { PRODUCTS, LAUNCH, formatINR, unitPrice } from "../data/catalog.js";
+import { PRODUCTS, LAUNCH, formatINR, unitPrice, GST_LABEL } from "../data/catalog.js";
 import { useShop } from "../lib/shop.jsx";
 import { useCountdown, pad } from "../lib/hooks.js";
-import { SplitReveal, FadeUp, Tilt, Magnetic, ParallaxImage, ease } from "../components/motion.jsx";
+import { SplitReveal, FadeUp, Tilt, Magnetic, ease } from "../components/motion.jsx";
 import { Chapter } from "../components/Ornament.jsx";
 import Particles from "../components/Particles.jsx";
-import { Baubles, Star, Holly, GiftRibbon } from "../components/Christmas.jsx";
+import { Toran, Rangoli, Diya, GoldCoins } from "../components/Dhanteras.jsx";
 
 const fmt = (iso) => new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" });
 
@@ -19,62 +19,40 @@ export default function PreBook() {
 
   const steps = [
     { date: "Today", title: "Discover", text: "Explore RUBIIK ONE and join the list.", active: phase === "teaser" },
-    { date: fmt(LAUNCH.prebookOpens), title: "Pre-booking opens", text: "Reserve your numbered piece with 20% off.", active: phase === "prebook" },
-    { date: fmt(LAUNCH.launch), title: "Christmas launch", text: "RUBIIK ONE is revealed and delivered.", active: phase === "launched" },
+    { date: phase === "teaser" ? fmt(LAUNCH.prebookOpens) : "Now open", title: "Pre-booking", text: "Reserve your numbered piece with 20% off.", active: phase === "prebook" },
+    { date: fmt(LAUNCH.launch), title: "Launch", text: "RUBIIK ONE is revealed and deliveries begin.", active: phase === "launched" },
   ];
 
   return (
     <section id="prebook" className="relative overflow-hidden bg-wine-800 py-28 sm:py-40">
       <div className="damask pointer-events-none absolute inset-0 opacity-[0.05]" />
-      {/* Christmas: soft snowfall, warm glow and hanging baubles */}
+      {/* Warm glow and drifting gold dust */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[70%] bg-[radial-gradient(ellipse_at_top,rgba(165,0,3,0.55),transparent_65%)]" />
-      <Particles mode="snow" density={0.8} />
-      <Baubles className="hidden sm:block" />
+      <Particles density={0.8} />
       <div className="relative mx-auto max-w-[1600px] px-5 sm:px-10">
         <div className="text-center">
-          <div className="mb-6 flex items-center justify-center gap-2">
-            <Holly className="h-8 w-14 sm:h-10 sm:w-16" />
-            <Star className="h-14 w-14 sm:h-16 sm:w-16" />
-            <Holly className="h-8 w-14 sm:h-10 sm:w-16" flip />
-          </div>
-          <Chapter n="IX" title="Pre-booking · A Christmas reveal" center />
+          <Chapter n="IX" title={phase === "prebook" ? "Pre-booking · Now open" : "Pre-booking"} center />
           <h2 className="mx-auto mt-6 max-w-5xl font-serif text-5xl leading-[1.02] sm:text-8xl">
             <SplitReveal text="Reserve your piece" by="word" />
             <br />
             <SplitReveal text="of the edition." by="word" className="italic text-gold" delay={0.2} />
           </h2>
           <FadeUp className="mx-auto mt-8 max-w-xl text-lg text-ivory-dim">
-            Pre-book from {fmt(LAUNCH.prebookOpens)} and receive an exclusive <span className="text-gold-light">20% privilege</span>. RUBIIK ONE launches on
-            Christmas Day, {fmt(LAUNCH.launch)}.
+            {phase === "launched" ? (
+              <>RUBIIK ONE launched on {fmt(LAUNCH.launch)}. The remaining numbered pieces are available while they last.</>
+            ) : (
+              <>
+                {phase === "teaser" ? `Pre-book from ${fmt(LAUNCH.prebookOpens)} and receive` : "Pre-booking is open now. Reserve yours and receive"} an exclusive{" "}
+                <span className="text-gold-light">{Math.round(LAUNCH.prebookDiscount * 100)}% privilege</span>. RUBIIK ONE launches on {fmt(LAUNCH.launch)}.
+              </>
+            )}
           </FadeUp>
           <FadeUp delay={0.15} className="mt-4 font-serif text-2xl italic text-gold sm:text-3xl">
-            The gift of time, unwrapped on Christmas morning.
+            Only 200 pieces. Never repeated.
           </FadeUp>
         </div>
 
-        {/* The Christmas pair: a framed window onto the festive campaign shot */}
-        <FadeUp className="relative mx-auto mt-16 max-w-6xl">
-          <div className="frame-royal relative">
-            <ParallaxImage
-              src="/images/christmas-duo.webp"
-              alt="RUBIIK ONE Automatic Skeleton and Quartz Olive beside wrapped gifts, Christmas lights and snow"
-              className="aspect-[4/3] w-full sm:aspect-[2/1]"
-              imgClassName="object-[50%_55%]"
-              strength={50}
-              scale={1.15}
-            />
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-night-900/85 via-transparent to-night-900/20" />
-            <div className="absolute inset-x-0 bottom-0 flex flex-col items-start gap-1 p-5 sm:flex-row sm:items-end sm:justify-between sm:p-8">
-              <div>
-                <p className="eyebrow text-gold">RUBIIK ONE · The Christmas pair</p>
-                <p className="mt-1 font-serif text-2xl sm:text-4xl">Two characters. One unforgettable gift.</p>
-              </div>
-              <p className="font-serif text-lg italic text-gold-light sm:text-2xl">Under the tree · 25 · XII</p>
-            </div>
-          </div>
-          <Holly className="absolute -left-4 -top-5 h-10 w-16 -rotate-12 sm:-left-8 sm:-top-7 sm:h-14 sm:w-24" />
-          <Holly className="absolute -bottom-5 -right-4 h-10 w-16 rotate-12 sm:-bottom-7 sm:-right-8 sm:h-14 sm:w-24" flip />
-        </FadeUp>
+        <LaunchDate />
 
         {/* Countdown */}
         {phase !== "launched" && (
@@ -103,21 +81,16 @@ export default function PreBook() {
             ))}
           </FadeUp>
         )}
-        <p className="eyebrow mt-5 text-center">{phase === "teaser" ? "Until pre-booking opens" : phase === "prebook" ? "Until the Christmas launch" : ""}</p>
+        <p className="eyebrow mt-5 text-center">{phase === "teaser" ? "Until pre-booking opens" : phase === "prebook" ? "Until the launch" : ""}</p>
 
         {/* Timeline */}
         <div className="relative mx-auto mt-20 grid max-w-5xl gap-10 md:grid-cols-3">
           <div className="hairline absolute left-0 right-0 top-[7px] hidden md:block" />
           {steps.map((s, i) => (
             <FadeUp key={s.title} delay={i * 0.12} className="relative text-center">
-              {i === steps.length - 1 ? (
-                // Christmas Day is marked with the star rather than a diamond.
-                <Star className="relative z-10 mx-auto -mt-4 h-12 w-12" />
-              ) : (
-                <span className={`relative z-10 mx-auto block h-4 w-4 rotate-45 border ${s.active ? "bg-gold border-gold" : "border-gold/60 bg-wine-800"}`}>
-                  {s.active && <span className="bg-gold absolute inset-0 animate-ping opacity-60" />}
-                </span>
-              )}
+              <span className={`relative z-10 mx-auto block h-4 w-4 rotate-45 border ${s.active ? "bg-gold border-gold" : "border-gold/60 bg-wine-800"}`}>
+                {s.active && <span className="bg-gold absolute inset-0 animate-ping opacity-60" />}
+              </span>
               <p className="eyebrow mt-6 text-gold">{s.date}</p>
               <p className="mt-2 font-serif text-3xl">{s.title}</p>
               <p className="mt-2 text-sm text-ivory-dim">{s.text}</p>
@@ -138,15 +111,61 @@ export default function PreBook() {
   );
 }
 
+// The launch date set as a headline, dressed for Dhanteras (the launch day): a marigold toran above,
+// a slowly turning rangoli behind the date, drifting gold coins and a row of lit diyas below.
+function LaunchDate() {
+  const part = (opt) => new Date(LAUNCH.launch).toLocaleDateString("en-IN", { ...opt, timeZone: "Asia/Kolkata" });
+  const [day, month, year] = [part({ day: "numeric" }), part({ month: "long" }), part({ year: "numeric" })];
+  return (
+    <div className="relative mx-auto mt-20 max-w-6xl overflow-hidden pb-10 pt-16 text-center sm:mt-24 sm:pt-24">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(232,162,58,0.22),transparent_62%)]" />
+      {/* The wrapper centres the rangoli; the rangoli's own transform is left free for its rotation. */}
+      <div className="pointer-events-none absolute left-1/2 top-1/2 w-[min(150vw,46rem)] -translate-x-1/2 -translate-y-1/2 opacity-40">
+        <Rangoli className="block w-full" />
+      </div>
+      <GoldCoins />
+      <Toran className="pointer-events-none absolute left-1/2 top-0 w-[170%] max-w-4xl -translate-x-1/2 sm:w-full" />
+
+      <div className="relative">
+        <FadeUp className="flex items-center justify-center gap-4 sm:gap-6">
+          <span className="h-px w-6 bg-gradient-to-r from-transparent to-gold sm:w-24" />
+          <span className="eyebrow whitespace-nowrap text-gold">The launch · Dhanteras</span>
+          <span className="h-px w-6 bg-gradient-to-l from-transparent to-gold sm:w-24" />
+        </FadeUp>
+        <h3
+          aria-label={`Launching ${day} ${month} ${year}, on Dhanteras`}
+          className="mt-6 flex flex-wrap items-baseline justify-center gap-x-[0.18em] font-serif text-[clamp(4.25rem,11vw,10rem)] leading-[0.9] [text-shadow:0_0_40px_rgba(232,162,58,0.35)]"
+        >
+          <SplitReveal text={day} />
+          <SplitReveal text={month} className="italic text-gold" delay={0.12} />
+          <SplitReveal text={year} delay={0.24} />
+        </h3>
+        <FadeUp delay={0.3} className="mx-auto mt-6 max-w-xl font-serif text-xl italic text-gold-light sm:text-2xl">
+          Unveiled on Dhanteras, the day of gold and new beginnings.
+        </FadeUp>
+        <FadeUp delay={0.4} className="mt-8 flex items-end justify-center gap-3 sm:gap-6">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <Diya key={i} delay={i * 0.35} className={i === 2 ? "h-16 w-16 sm:h-20 sm:w-20" : "h-11 w-11 sm:h-14 sm:w-14"} />
+          ))}
+        </FadeUp>
+        <FadeUp delay={0.45} className="mt-5 text-[11px] uppercase tracking-[0.35em] text-ivory-mute">
+          RUBIIK ONE · 00:00 IST
+        </FadeUp>
+      </div>
+    </div>
+  );
+}
+
 function ProductCard({ p, i, phase, stock }) {
   const { add } = useShop();
   const price = unitPrice(p, phase);
+  // Before pre-booking opens, cards still preview the pre-booking price.
+  const prebookPrice = unitPrice(p, "prebook");
   const soldOut = stock && stock.remaining <= 0;
   return (
     <FadeUp delay={i * 0.15}>
       <Tilt className="frame-royal group relative overflow-hidden bg-gradient-to-br from-night-600/60 to-night-900 p-8 sm:p-12" max={5}>
         <div className="pointer-events-none absolute -right-20 -top-20 h-80 w-80 rounded-full opacity-30 blur-3xl transition-opacity duration-700 group-hover:opacity-60" style={{ background: p.accent }} />
-        <GiftRibbon label="25 · XII" />
         <div className="relative flex flex-col items-center gap-8 sm:flex-row">
           <Link to={`/watch/${p.slug}`} className="shrink-0" data-cursor="Discover">
             <img loading="lazy" decoding="async"
@@ -166,17 +185,17 @@ function ProductCard({ p, i, phase, stock }) {
                 <p className="font-serif text-4xl">{formatINR(p.price)}</p>
               ) : (
                 <div className="flex items-baseline justify-center gap-4 sm:justify-start">
-                  <p className="font-serif text-4xl">{formatINR(Math.round(p.price * (1 - LAUNCH.prebookDiscount)))}</p>
+                  <p className="font-serif text-4xl">{formatINR(prebookPrice)}</p>
                   <p className="text-ivory-mute line-through">{formatINR(p.price)}</p>
                 </div>
               )}
               <p className="eyebrow mt-2">
-                {phase === "launched" ? "Limited edition" : "Pre-booking price · save " + formatINR(p.price - Math.round(p.price * 0.8))}
+                {phase === "launched" ? `Limited edition · ${GST_LABEL}` : `Pre-booking price · save ${formatINR(p.price - prebookPrice)} · ${GST_LABEL}`}
               </p>
             </div>
             <div className="mt-8 flex flex-wrap justify-center gap-3 sm:justify-start">
               {phase === "teaser" ? (
-                <span className="btn-ghost pointer-events-none opacity-70">Opens 6 Nov</span>
+                <span className="btn-ghost pointer-events-none opacity-70">Opening soon</span>
               ) : (
                 <Magnetic>
                   <button className="btn-gold" disabled={soldOut} onClick={() => add(p.slug)}>

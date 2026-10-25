@@ -66,7 +66,7 @@ export default function Overview() {
                           <td className="py-3 pr-4 font-sans text-xs text-ivory-dim">{o.id}</td>
                           <td className="py-3 pr-4">{o.customer.name}</td>
                           <td className="py-3 pr-4 text-ivory-dim">{o.items.map((i) => `${i.qty}× ${i.name.replace("RUBIIK ONE ", "")}`).join(", ")}</td>
-                          <td className="py-3 pr-4">{formatINR(o.subtotal)}</td>
+                          <td className="py-3 pr-4">{formatINR(o.total)}</td>
                           <td className="py-3 pr-4">
                             <StatusBadge status={o.status} />
                           </td>

@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useParams, Link, Navigate } from "react-router-dom";
 import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
-import { findProduct, PRODUCTS, formatINR, unitPrice, LAUNCH } from "../data/catalog.js";
+import { findProduct, PRODUCTS, formatINR, unitPrice, GST_LABEL } from "../data/catalog.js";
 import { useShop, MAX_PER_MODEL } from "../lib/shop.jsx";
 import { SplitReveal, FadeUp, Magnetic, ParallaxImage, ease } from "../components/motion.jsx";
 import { EdgeVeins } from "../components/GoldVeins.jsx";
@@ -86,11 +86,11 @@ export default function Product() {
                 ) : (
                   <>
                     <p className="text-ivory-mute line-through">{formatINR(p.price)}</p>
-                    <p className="font-serif text-5xl">{formatINR(Math.round(p.price * (1 - LAUNCH.prebookDiscount)))}</p>
+                    <p className="font-serif text-5xl">{formatINR(unitPrice(p, "prebook"))}</p>
                   </>
                 )}
                 <p className="eyebrow mt-2 text-gold">
-                  {phase === "teaser" ? "Pre-booking price from 6 November" : phase === "prebook" ? "Pre-booking privilege · 20% off" : "Inclusive of all taxes"}
+                  {phase === "launched" ? GST_LABEL : `Pre-booking privilege · 20% off · ${GST_LABEL}`}
                 </p>
               </div>
               <p className="eyebrow ml-auto tabular-nums">
@@ -101,7 +101,7 @@ export default function Product() {
             <div className="mt-8 flex flex-wrap items-center gap-4">
               {phase === "teaser" ? (
                 <Link to="/#prebook" className="btn-gold">
-                  Notify me on 6 November
+                  Notify me
                 </Link>
               ) : (
                 <>

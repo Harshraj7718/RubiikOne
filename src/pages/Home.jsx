@@ -12,18 +12,25 @@ import Limited from "../sections/Limited.jsx";
 import PreBook from "../sections/PreBook.jsx";
 import Finale from "../sections/Finale.jsx";
 import { Marquee } from "../components/motion.jsx";
-import { PRODUCTS } from "../data/catalog.js";
+import { PRODUCTS, LAUNCH, formatDate } from "../data/catalog.js";
+import { useShop } from "../lib/shop.jsx";
 
 const [AUTOMATIC, QUARTZ] = PRODUCTS;
 
 export default function Home({ ready }) {
+  const { phase } = useShop();
+  const offer = `${Math.round(LAUNCH.prebookDiscount * 100)}% off`;
+  const launchNews =
+    phase === "launched"
+      ? ["Now available", "While pieces last"]
+      : [phase === "prebook" ? `Pre-booking now open · ${offer}` : `Pre-booking from ${formatDate(LAUNCH.prebookOpens)} · ${offer}`, `Launching ${formatDate(LAUNCH.launch)}`];
   return (
     <>
       <Hero ready={ready} />
       <Owners />
       <Marquee
         className="border-y border-ivory/10 py-5 font-sans text-[12px] uppercase tracking-mega text-ivory/60"
-        items={["Limited to 200 pieces", "Pre-booking from 6 November · 20% off", "Launching 25 December", "Every second has a shape"]}
+        items={[`Limited to ${LAUNCH.editionSize} pieces`, ...launchNews, "Every second has a shape"]}
       />
       <Manifesto />
       <Meaning />

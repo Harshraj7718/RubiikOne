@@ -76,7 +76,7 @@ export default function Account() {
                 {o.id} · {o.items.map((i) => `${i.qty}× ${i.name.replace("RUBIIK ONE ", "")}`).join(", ")}
               </span>
               <span>
-                {formatINR(o.subtotal)} · held until {new Date(o.holdUntil).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                {formatINR(o.total)} · held until {new Date(o.holdUntil).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
               </span>
             </div>
           ))}

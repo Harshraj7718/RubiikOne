@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion, useScroll, useTransform, useMotionValueEvent, AnimatePresence } from "framer-motion";
-import { PRODUCTS, formatINR, unitPrice } from "../data/catalog.js";
+import { PRODUCTS, formatINR, unitPrice, GST_LABEL } from "../data/catalog.js";
 import { useShop } from "../lib/shop.jsx";
 import { SplitReveal, FadeUp, Magnetic, ease } from "../components/motion.jsx";
 import { Chapter } from "../components/Ornament.jsx";
@@ -121,12 +121,12 @@ export default function Collection() {
                     <>
                       <p className="text-sm text-ivory-mute line-through">{formatINR(p.price)}</p>
                       <p className="font-serif text-4xl">{formatINR(unitPrice(p, phase))}</p>
-                      <p className="eyebrow mt-1 text-gold">Pre-booking −20%</p>
+                      <p className="eyebrow mt-1 text-gold">Pre-booking −20% · {GST_LABEL}</p>
                     </>
                   ) : (
                     <>
                       <p className="font-serif text-4xl">{formatINR(p.price)}</p>
-                      <p className="eyebrow mt-1 text-gold">{phase === "teaser" ? "20% off when you pre-book" : "Limited edition"}</p>
+                      <p className="eyebrow mt-1 text-gold">{phase === "teaser" ? "20% off when you pre-book" : "Limited edition"} · {GST_LABEL}</p>
                     </>
                   )}
                 </motion.div>

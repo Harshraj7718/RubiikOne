@@ -7,12 +7,15 @@ import { ease, Magnetic } from "../components/motion.jsx";
 import Particles from "../components/Particles.jsx";
 import GoldVeins from "../components/GoldVeins.jsx";
 import { ShaderBackground } from "@/components/ui/silk-shader";
-import { PRODUCTS, LAUNCH, formatINR } from "../data/catalog.js";
+import { PRODUCTS, LAUNCH, formatINR, formatDate, unitPrice, isFestive, GST_LABEL } from "../data/catalog.js";
+import { Toran, Diya, SilkBanner } from "../components/Dhanteras.jsx";
 import { useShop } from "../lib/shop.jsx";
 import { useCountdown, pad } from "../lib/hooks.js";
 import { scrollToId } from "../App.jsx";
 
 const [AUTOMATIC, QUARTZ] = PRODUCTS;
+// The lower-priced model, quoted as the pre-booking "from" price.
+const ENTRY = PRODUCTS.reduce((a, b) => (b.price < a.price ? b : a));
 // Droplets on the floor: [left %, bottom %, width px, height px]
 const DROPS = [
   [8, 10, 26, 8],
@@ -44,7 +47,8 @@ export default function Hero({ ready }) {
 
   const { phase, status } = useShop();
   const t = useCountdown(phase === "teaser" ? status.launch.prebookOpens : status.launch.launch);
-  const prebookPrice = formatINR(Math.round(AUTOMATIC.price * (1 - LAUNCH.prebookDiscount)));
+  // Re-checked on every countdown tick, so the festive touch disappears by itself after 7 November.
+  const festive = isFestive();
 
   return (
     <section
@@ -60,7 +64,21 @@ export default function Hero({ ready }) {
         <ShaderBackground className="absolute inset-0" />
       </div>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_38%_50%,rgba(11,19,33,0.15)_0%,rgba(6,11,19,0.55)_55%,rgba(4,8,14,0.9)_100%)]" />
-      <Particles mode="dust" tone="white" density={0.8} />
+      <Particles tone="white" density={0.8} />
+      {festive && (
+        // Dhanteras: a warm lamp-glow behind the copy and a slim marigold toran under the menu bar.
+        <motion.div style={{ opacity: fade }} className="pointer-events-none absolute inset-0" aria-hidden="true">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_78%_55%,rgba(232,162,58,0.16),transparent_55%)]" />
+          <motion.div
+            initial={{ opacity: 0, y: -12 }}
+            animate={ready ? { opacity: 0.85, y: 0 } : {}}
+            transition={{ duration: 1.2, ease, delay: 1 }}
+            className="absolute left-1/2 top-16 w-[150%] max-w-5xl -translate-x-1/2 sm:w-[90%]"
+          >
+            <Toran className="block w-full" />
+          </motion.div>
+        </motion.div>
+      )}
       <motion.div style={{ opacity: fade }} className="pointer-events-none absolute inset-0">
         <GoldVeins corner="top-right" ready={ready} className="!top-16 h-auto w-[64vw] max-w-[560px] sm:!top-0 sm:w-[40vw] lg:w-[30vw]" />
         <GoldVeins corner="bottom-left" ready={ready} className="h-auto w-[56vw] max-w-[500px] sm:w-[36vw] lg:w-[26vw]" />
@@ -150,42 +168,83 @@ export default function Hero({ ready }) {
           animate={ready ? "show" : "hidden"}
           variants={{ show: { transition: { staggerChildren: 0.12, delayChildren: 0.8 } } }}
         >
-          <motion.p variants={item} className="eyebrow hidden lg:block">
-            The signature collection · Est. MMXXVI
-          </motion.p>
+          {festive ? (
+            // The launch date on a banner of red silk rippling in the air.
+            <motion.div variants={item} className="mb-4 flex justify-center lg:mb-0 lg:justify-start">
+              <SilkBanner className="px-5 py-3 sm:px-7 sm:py-4">
+                <div className="flex items-center justify-center gap-3 sm:gap-4">
+                  <Diya className="h-9 w-9 shrink-0 sm:h-11 sm:w-11" />
+                  <div className="text-center">
+                    <p className="text-[9px] uppercase tracking-[0.35em] text-gold-light sm:text-[10px]">Launching on Dhanteras</p>
+                    <p className="mt-1 whitespace-nowrap font-serif text-[1.7rem] leading-none text-ivory [text-shadow:0_2px_8px_rgba(60,0,0,0.6)] sm:text-4xl">
+                      {formatDate(LAUNCH.launch, { day: "numeric", month: undefined })}{" "}
+                      <span className="italic text-gold-light">{formatDate(LAUNCH.launch, { day: undefined, month: "long" })}</span>{" "}
+                      {new Date(LAUNCH.launch).getFullYear()}
+                    </p>
+                  </div>
+                  <Diya className="h-9 w-9 shrink-0 sm:h-11 sm:w-11" delay={0.5} />
+                </div>
+                {/* The offer only applies until launch, so it leaves the banner once the watches are out. */}
+                {phase !== "launched" && (
+                  <p className="mx-auto mt-2 w-fit whitespace-nowrap border-t border-gold-light/40 pt-1.5 text-center text-[9px] font-medium uppercase tracking-[0.16em] text-gold-light sm:text-[11px] sm:tracking-[0.25em]">
+                    Pre-book now · get <span className="text-ivory">{Math.round(LAUNCH.prebookDiscount * 100)}% off</span> before launch
+                  </p>
+                )}
+              </SilkBanner>
+            </motion.div>
+          ) : (
+            <motion.p variants={item} className="eyebrow hidden lg:block">
+              The signature collection · Est. MMXXVI
+            </motion.p>
+          )}
           <motion.h1 variants={item} className="font-serif text-[2.6rem] font-medium uppercase leading-[0.95] tracking-[0.04em] sm:text-6xl lg:mt-5 lg:text-[min(5.2rem,9vh)]">
             RUBIIK ONE:
           </motion.h1>
-          <motion.p variants={item} className="mt-1 font-serif text-xl uppercase tracking-[0.12em] text-gold sm:text-3xl lg:mt-2 lg:text-[min(2.4rem,4.4vh)]">
+          <motion.p variants={item} className="mt-1.5 whitespace-nowrap font-serif text-[0.95rem] uppercase tracking-[0.14em] text-gold sm:whitespace-normal sm:text-3xl sm:tracking-[0.12em] lg:mt-2 lg:text-[min(2.4rem,4.4vh)]">
             Precision in every dimension
           </motion.p>
           <motion.p variants={item} className="mx-auto mt-4 hidden max-w-md text-ivory-dim sm:block lg:mx-0 lg:mt-6">
-            An automatic skeleton and a quartz olive, sharing one numbered edition of only 200 pieces. Revealed this Christmas.
+            An automatic skeleton and a quartz olive, sharing one numbered edition of only {LAUNCH.editionSize} pieces.{" "}
+            {phase === "teaser"
+              ? `Pre-booking opens on ${formatDate(LAUNCH.prebookOpens)}; the edition launches on ${formatDate(LAUNCH.launch)}.`
+              : phase === "prebook"
+                ? `Pre-booking is open now; the edition launches on ${formatDate(LAUNCH.launch)}.`
+                : `Launched on ${formatDate(LAUNCH.launch)}; available while pieces last.`}
           </motion.p>
-          <motion.p variants={item} className="mt-3 text-sm text-ivory-dim lg:mt-5">
-            {phase === "launched" ? (
-              <span className="text-ivory">{formatINR(AUTOMATIC.price)} each</span>
-            ) : (
-              <>
-                <span className="text-ivory">{prebookPrice}</span> pre-book <span className="line-through opacity-60">{formatINR(AUTOMATIC.price)}</span> · each
-              </>
+          <motion.p variants={item} className="mt-3 text-[13px] text-ivory-dim sm:hidden">
+            {phase === "launched" ? "From" : "Pre-book from"}{" "}
+            <span className="text-ivory">{formatINR(phase === "launched" ? ENTRY.price : unitPrice(ENTRY, "prebook"))}</span> {GST_LABEL}
+          </motion.p>
+          <motion.div variants={item} className="mt-3 hidden text-sm text-ivory-dim sm:block lg:mt-5">
+            <p className="flex flex-wrap justify-center gap-x-4 gap-y-1 lg:justify-start">
+              {PRODUCTS.map((p) => (
+                <span key={p.slug}>
+                  {p.edition} <span className="text-ivory">{formatINR(p.price)}</span>
+                </span>
+              ))}
+              <span>{GST_LABEL}</span>
+            </p>
+            {phase !== "launched" && (
+              <p className="mt-1 text-gold-light">
+                {Math.round(LAUNCH.prebookDiscount * 100)}% off when you pre-book · from {formatINR(unitPrice(ENTRY, "prebook"))} {GST_LABEL}
+              </p>
             )}
-          </motion.p>
-          <motion.div variants={item} className="mt-5 flex flex-wrap items-center justify-center gap-3 lg:mt-7 lg:justify-start">
+          </motion.div>
+          <motion.div variants={item} className="mt-4 flex flex-wrap items-center justify-center gap-3 sm:mt-5 lg:mt-7 lg:justify-start">
             <Magnetic>
-              <button onClick={() => scrollToId("prebook")} className="btn-gold !px-7 !py-3.5" data-cursor="Reserve">
+              <button onClick={() => scrollToId("prebook")} className="btn-gold !px-6 !py-3 sm:!px-7 sm:!py-3.5" data-cursor="Reserve">
                 {phase === "launched" ? "Shop the edition" : "Reserve yours"}
               </button>
             </Magnetic>
             <Magnetic>
-              <button onClick={() => scrollToId("collection")} className="btn-ghost !px-7 !py-3.5">
+              <button onClick={() => scrollToId("collection")} className="btn-ghost !px-6 !py-3 sm:!px-7 sm:!py-3.5">
                 Explore
               </button>
             </Magnetic>
           </motion.div>
           {phase !== "launched" && (
             <motion.p variants={item} className="mt-5 hidden text-[10px] uppercase tracking-[0.3em] text-ivory-mute sm:block lg:mt-8">
-              {phase === "teaser" ? "Pre-booking opens in" : "Christmas launch in"}{" "}
+              {phase === "teaser" ? "Pre-booking opens in" : "Launch in"}{" "}
               <span className="ml-2 font-serif text-base normal-case tracking-normal text-ivory tabular-nums">
                 {t.days}d {pad(t.hours)}h {pad(t.minutes)}m {pad(t.seconds)}s
               </span>

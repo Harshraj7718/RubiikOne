@@ -36,6 +36,8 @@ function setAdminCookie(res, token, maxAgeSeconds) {
   res.setHeader("Set-Cookie", `${ADMIN_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAgeSeconds}${secure}`);
 }
 
+// Amount charged incl. GST; orders placed before GST was added only have a subtotal.
+const orderTotal = (o) => o.total ?? o.subtotal;
 const IMAGE = /\.(webp|png|jpe?g|svg|gif|avif)$/i;
 // Cells starting with these could run as formulas when a CSV is opened in a spreadsheet.
 const csvCell = (v) => {
@@ -110,6 +112,8 @@ export function mountAdmin(app, { users, orders, waitlist, sessions }, { root })
     items: o.items,
     subtotal: o.subtotal,
     compareAt: o.compareAt,
+    gst: o.gst ?? 0,
+    total: orderTotal(o),
     wall: o.wall,
     certificates: o.certificates ?? [],
     payment: o.payment ? { provider: o.payment.provider, reference: o.payment.reference ?? null, paidAt: o.payment.paidAt ?? null } : null,
@@ -136,7 +140,7 @@ export function mountAdmin(app, { users, orders, waitlist, sessions }, { root })
     }));
     res.json({
       edition: { total: LAUNCH.editionSize, sold: pieces(paid), held: pieces(held), remaining: Math.max(0, LAUNCH.editionSize - pieces(paid) - pieces(held)) },
-      revenue: { paid: paid.reduce((n, o) => n + o.subtotal, 0), pending: held.reduce((n, o) => n + o.subtotal, 0) },
+      revenue: { paid: paid.reduce((n, o) => n + orderTotal(o), 0), pending: held.reduce((n, o) => n + orderTotal(o), 0) },
       counts: {
         customers: await users.countDocuments(),
         waitlist: await waitlist.countDocuments(),
@@ -169,7 +173,7 @@ export function mountAdmin(app, { users, orders, waitlist, sessions }, { root })
 
   app.get("/api/admin/orders.csv", requireAdmin, async (req, res) => {
     const list = await findOrders(req.query);
-    const rows = [["Order", "Created", "Status", "Name", "Email", "Phone", "Address", "City", "PIN", "Items", "Total (INR)", "Serials", "On wall", "Payment ref"]];
+    const rows = [["Order", "Created", "Status", "Name", "Email", "Phone", "Address", "City", "PIN", "Items", "Total incl. GST (INR)", "Serials", "On wall", "Payment ref"]];
     for (const o of list) {
       rows.push([
         o.id,
@@ -182,7 +186,7 @@ export function mountAdmin(app, { users, orders, waitlist, sessions }, { root })
         o.customer.city,
         o.customer.pincode,
         o.items.map((i) => `${i.qty}x ${i.name}`).join("; "),
-        o.subtotal,
+        o.total,
         o.certificates.map((c) => c.serial).join("; "),
         o.wall?.show ? o.wall.displayName : "",
         o.payment?.reference ?? "",
@@ -206,7 +210,7 @@ export function mountAdmin(app, { users, orders, waitlist, sessions }, { root })
           createdAt: u.createdAt,
           orders: mine.length,
           pieces: paid.reduce((n, o) => n + o.items.reduce((m, i) => m + i.qty, 0), 0),
-          spent: paid.reduce((n, o) => n + o.subtotal, 0),
+          spent: paid.reduce((n, o) => n + orderTotal(o), 0),
           serials: paid.flatMap((o) => (o.certificates ?? []).map((c) => c.serial)),
         };
       }),

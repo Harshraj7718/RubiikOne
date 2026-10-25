@@ -66,7 +66,7 @@ export default function Orders() {
                     <span className="block text-xs text-ivory-mute">{o.customer.email}</span>
                   </td>
                   <td className="px-4 py-3 text-ivory-dim">{o.items.map((i) => `${i.qty}× ${i.name.replace("RUBIIK ONE ", "")}`).join(", ")}</td>
-                  <td className="px-4 py-3">{formatINR(o.subtotal)}</td>
+                  <td className="px-4 py-3">{formatINR(o.total)}</td>
                   <td className="px-4 py-3">
                     <StatusBadge status={o.status} />
                   </td>
@@ -134,9 +134,15 @@ function OrderDrawer({ order: o, onClose }) {
               <span>{formatINR(i.unitPrice * i.qty)}</span>
             </div>
           ))}
+          {o.gst > 0 && (
+            <div className="flex justify-between py-1 text-sm text-ivory-dim">
+              <span>GST</span>
+              <span>{formatINR(o.gst)}</span>
+            </div>
+          )}
           <div className="mt-3 flex justify-between border-t border-ivory/10 pt-3">
             <span className="text-[10px] uppercase tracking-[0.2em] text-ivory-mute">Total</span>
-            <span className="font-serif text-2xl">{formatINR(o.subtotal)}</span>
+            <span className="font-serif text-2xl">{formatINR(o.total)}</span>
           </div>
         </div>
 

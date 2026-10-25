@@ -5,7 +5,7 @@ import { useRef } from "react";
 import { Link } from "react-router-dom";
 import { motion, useScroll, useTransform, useSpring } from "framer-motion";
 import { useShop } from "../lib/shop.jsx";
-import { LAUNCH, formatINR } from "../data/catalog.js";
+import { LAUNCH, formatINR, unitPrice, GST_LABEL } from "../data/catalog.js";
 import { Emblem } from "../components/Logo.jsx";
 import { ease } from "../components/motion.jsx";
 
@@ -27,8 +27,8 @@ export default function Blueprint({ product, sky, panel, quote, attribution, pla
     phase === "teaser"
       ? [`Pre-booking opens ${date(LAUNCH.prebookOpens)}`, "Reserve with a 20% privilege"]
       : phase === "prebook"
-        ? ["Pre-booking now open", `${formatINR(Math.round(product.price * (1 - LAUNCH.prebookDiscount)))} · 20% privilege`]
-        : ["Now available", formatINR(product.price)];
+        ? ["Pre-booking now open", `${formatINR(unitPrice(product, "prebook"))} ${GST_LABEL} · ${Math.round(LAUNCH.prebookDiscount * 100)}% privilege`]
+        : ["Now available", `${formatINR(product.price)} ${GST_LABEL}`];
 
   // Both watch layers share one box so the drawing and the photo line up exactly.
   const watchBox = (src, extra = "") => (

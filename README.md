@@ -60,13 +60,15 @@ Set `NODE_ENV=production` there so session cookies are marked `Secure`.
 | Setting | Value |
 | --- | --- |
 | Pieces | 200 in total, shared by both models (`LAUNCH.editionSize`) |
-| Price | ₹30,000 each |
-| Pre-booking | opens 6 Nov 2026, 00:00 IST — 20% off (₹24,000) |
-| Launch | 25 Dec 2026, 00:00 IST (Christmas) |
+| Price (before GST) | Automatic Skeleton ₹46,000 · Quartz Olive ₹35,000 |
+| GST | 18%, added on the amount paid (`LAUNCH.gstRate`) |
+| Pre-booking | open now (since 24 Oct 2026) — 20% off: ₹36,800 and ₹28,000 + GST |
+| Launch | 6 Nov 2026, 00:00 IST |
 | Limit | 2 per model per order |
 
-Phases are decided by the server: **teaser** (before 6 Nov: countdown + "Notify me" waitlist),
-**prebook** (6 Nov – 24 Dec: discounted pre-orders), **launched** (full price).
+Phases are decided by the server: **teaser** (before pre-booking opens: countdown + "Notify me" waitlist),
+**prebook** (until 5 Nov: discounted pre-orders), **launched** (from 6 Nov, full price).
+Orders store `subtotal` (after discount, before GST), `gst` and `total`; the customer is charged `total`.
 Prices and stock are always recomputed on the server.
 
 ## Pre-order flow
@@ -108,6 +110,7 @@ on the server. To change the password, edit the variable and restart (or redeplo
 
 - `src/sections/` — home page sections (Hero, Owners, Manifesto, Meaning, Vision, Collection, Gallery, Blueprint, Details, Experience, Limited, PreBook, Finale)
 - `src/pages/` — product detail, checkout (sign in → details → payment → certificate) and account
+- `src/pages/Privacy.jsx`, `src/pages/Terms.jsx` — Privacy Policy (`/privacy`) and Terms of Service (`/terms`); the contact email and date are in `src/data/legal.js`
 - `src/components/Certificate.jsx` — the owner's certificate card
 - `src/components/motion.jsx` — split-text reveals, scroll-scrubbed words, parallax, magnetic and tilt hovers
 - `server/` — API: `index.js` (status, waitlist, pre-orders, verification, owners wall), `auth.js` (accounts and sessions), `payments.js` (Razorpay / test mode), `db.js` (MongoDB connection and indexes)

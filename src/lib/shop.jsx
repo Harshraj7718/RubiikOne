@@ -1,6 +1,6 @@
 // Cart, launch phase and live stock, shared across the app.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { PRODUCTS, LAUNCH, findProduct, phaseAt, unitPrice } from "../data/catalog.js";
+import { PRODUCTS, LAUNCH, findProduct, phaseAt, unitPrice, totalsFor } from "../data/catalog.js";
 
 const ShopContext = createContext(null);
 const CART_KEY = "rubiik.cart";
@@ -66,14 +66,18 @@ export function ShopProvider({ children }) {
       const product = findProduct(l.slug);
       return { ...l, product, unit: unitPrice(product, status.phase), compareAt: product.price };
     });
+    const totals = totalsFor(lines.map((l) => ({ unit: l.unit, list: l.compareAt, qty: l.qty })));
     return {
       status,
       phase: status.phase,
       refreshStatus,
       cart: lines,
       count: lines.reduce((n, l) => n + l.qty, 0),
-      subtotal: lines.reduce((n, l) => n + l.unit * l.qty, 0),
-      compareTotal: lines.reduce((n, l) => n + l.compareAt * l.qty, 0),
+      // subtotal and compareTotal are before GST; total = subtotal + gst is what the customer pays.
+      subtotal: totals.subtotal,
+      compareTotal: totals.listTotal,
+      gst: totals.gst,
+      total: totals.total,
       add,
       setQty,
       clear,

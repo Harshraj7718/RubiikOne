@@ -57,7 +57,7 @@ export default function Design() {
                 RUBIIK ONE — an automatic skeleton and a quartz olive, sharing one numbered edition of only 200 pieces.
               </p>
               <p className="eyebrow mt-4">Eyebrow label · The signature collection</p>
-              <p className="mt-3 text-sm text-ivory-mute">Aa Bb Cc 0123456789 ₹24,000</p>
+              <p className="mt-3 text-sm text-ivory-mute">Aa Bb Cc 0123456789 ₹46,000</p>
             </div>
           </div>
         </Panel>

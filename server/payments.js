@@ -9,7 +9,8 @@ export const PAYMENT_MODE = KEY_ID && KEY_SECRET ? "razorpay" : "test";
 
 /** Starts a payment for an order; returns what the browser needs to collect it. */
 export async function startPayment(order) {
-  if (PAYMENT_MODE === "test") return { provider: "test", amount: order.subtotal };
+  // order.amount is the full amount to charge in rupees, GST included.
+  if (PAYMENT_MODE === "test") return { provider: "test", amount: order.amount };
 
   const res = await fetch("https://api.razorpay.com/v1/orders", {
     method: "POST",
@@ -17,7 +18,7 @@ export async function startPayment(order) {
       "Content-Type": "application/json",
       Authorization: `Basic ${Buffer.from(`${KEY_ID}:${KEY_SECRET}`).toString("base64")}`,
     },
-    body: JSON.stringify({ amount: order.subtotal * 100, currency: "INR", receipt: order.id, notes: { orderId: order.id } }),
+    body: JSON.stringify({ amount: order.amount * 100, currency: "INR", receipt: order.id, notes: { orderId: order.id } }),
   });
   if (!res.ok) throw Object.assign(new Error("The payment gateway is unavailable. Please try again shortly."), { status: 502 });
   const rzp = await res.json();

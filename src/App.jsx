@@ -14,6 +14,8 @@ const Product = lazy(() => import("./pages/Product.jsx"));
 const Checkout = lazy(() => import("./pages/Checkout.jsx"));
 const Account = lazy(() => import("./pages/Account.jsx"));
 const AdminApp = lazy(() => import("./pages/admin/AdminApp.jsx"));
+const Privacy = lazy(() => import("./pages/Privacy.jsx"));
+const Terms = lazy(() => import("./pages/Terms.jsx"));
 const PageFallback = () => <div className="min-h-screen bg-night" />;
 import { useShop } from "./lib/shop.jsx";
 
@@ -105,6 +107,8 @@ export default function App() {
               <Route path="/watch/:slug" element={<Product />} />
               <Route path="/checkout" element={<Checkout />} />
               <Route path="/account" element={<Account />} />
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/terms" element={<Terms />} />
               <Route path="*" element={<Home ready={loaded} />} />
             </Routes>
           </Suspense>

@@ -5,7 +5,7 @@ import { formatINR, LAUNCH } from "../data/catalog.js";
 import { ease } from "./motion.jsx";
 
 export default function CartDrawer() {
-  const { cart, cartOpen, setCartOpen, setQty, subtotal, compareTotal, phase } = useShop();
+  const { cart, cartOpen, setCartOpen, setQty, subtotal, compareTotal, gst, total, phase } = useShop();
   const saving = compareTotal - subtotal;
 
   return (
@@ -87,9 +87,13 @@ export default function CartDrawer() {
                     <span>− {formatINR(saving)}</span>
                   </div>
                 )}
+                <div className="mb-3 flex justify-between text-sm text-ivory-dim">
+                  <span>GST ({Math.round(LAUNCH.gstRate * 100)}%)</span>
+                  <span>{formatINR(gst)}</span>
+                </div>
                 <div className="mb-6 flex items-baseline justify-between">
                   <span className="eyebrow text-ivory">Total</span>
-                  <span className="font-serif text-3xl">{formatINR(subtotal)}</span>
+                  <span className="font-serif text-3xl">{formatINR(total)}</span>
                 </div>
                 {phase === "teaser" ? (
                   <p className="text-center text-sm text-ivory-dim">
