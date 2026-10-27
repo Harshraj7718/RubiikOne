@@ -1,16 +1,18 @@
 // Contact details shown in the footer and on the Privacy Policy and Terms of Service pages.
-// TEST VALUES: replace every field below with RUBIIK's real details before going live.
 export const CONTACT = {
-  email: "care@rubiik.com",
+  company: "BookLynk Services Private Limited",
+  email: "support@rubiikone.com",
+  address: ["Plot No. A4, Logix Technova", "B-320, Sector 132, Noida", "Gautam Buddha Nagar, Uttar Pradesh 201304", "India"],
+  // TEST VALUES: replace these with RUBIIK's real phone, WhatsApp, hours and Instagram before going live.
   phone: "+91 98765 43210",
   whatsapp: "+91 98765 43210",
-  address: ["RUBIIK Studio", "12 Example Lane, Bandra West", "Mumbai, Maharashtra 400050", "India"],
   hours: "Monday – Saturday, 10:00 – 19:00 IST",
   instagram: "rubiik.watches",
 };
 
 export const LEGAL = {
   brand: "RUBIIK",
+  company: CONTACT.company,
   updated: "25 October 2026",
   contactEmail: CONTACT.email,
 };

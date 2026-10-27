@@ -2,6 +2,7 @@
 import { PRODUCTS, LAUNCH, formatINR, unitPrice } from "../data/catalog.js";
 import { MAX_PER_MODEL } from "../lib/shop.jsx";
 import LegalPage, { Section, List, Strong, Mail } from "../components/LegalPage.jsx";
+import { CONTACT } from "../data/legal.js";
 
 const launchDate = new Date(LAUNCH.launch).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" });
 const gst = `${Math.round(LAUNCH.gstRate * 100)}%`;
@@ -11,7 +12,7 @@ export default function Terms() {
   return (
     <LegalPage
       title="Terms of Service"
-      intro="These terms apply when you use this website, create a RUBIIK account or pre-order a RUBIIK ONE watch. By placing an order you agree to them, so please read them carefully."
+      intro={`RUBIIK is a product of ${CONTACT.company}. These terms apply when you use this website, create a RUBIIK account or pre-order a RUBIIK ONE watch. By placing an order you agree to them, so please read them carefully.`}
       other={{ to: "/privacy", label: "Privacy Policy" }}
     >
       <Section n="1" title="The edition">
@@ -116,7 +117,7 @@ export default function Terms() {
 
       <Section n="13" title="Changes and contact">
         <p>
-          We may update these terms; the version shown when you place your order applies to that order. Questions can be sent to <Mail />.
+          We may update these terms; the version shown when you place your order applies to that order. Questions can be sent to <Mail />, or by post to {CONTACT.company}, {CONTACT.address.join(", ")}.
         </p>
       </Section>
     </LegalPage>

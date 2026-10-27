@@ -1,11 +1,12 @@
 // Privacy Policy: what the store collects (accounts, pre-orders, waitlist, owners wall) and why.
 import LegalPage, { Section, List, Strong, Mail } from "../components/LegalPage.jsx";
+import { CONTACT } from "../data/legal.js";
 
 export default function Privacy() {
   return (
     <LegalPage
       title="Privacy Policy"
-      intro="RUBIIK (“RUBIIK”, “we”, “us”) sells the RUBIIK ONE limited edition through this website. This policy explains what personal information we collect when you browse, create an account, join the waitlist or pre-order a watch, how we use it, and the choices you have."
+      intro={`RUBIIK is a product of ${CONTACT.company} (“RUBIIK”, “we”, “us”), which sells the RUBIIK ONE limited edition through this website. This policy explains what personal information we collect when you browse, create an account, join the waitlist or pre-order a watch, how we use it, and the choices you have.`}
       other={{ to: "/terms", label: "Terms of Service" }}
     >
       <Section n="1" title="Information we collect">
@@ -118,7 +119,7 @@ export default function Privacy() {
 
       <Section n="10" title="Contact">
         <p>
-          Questions about your privacy can be sent to <Mail />.
+          Questions about your privacy can be sent to <Mail />, or by post to {CONTACT.company}, {CONTACT.address.join(", ")}.
         </p>
       </Section>
     </LegalPage>

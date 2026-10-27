@@ -60,6 +60,7 @@ export default function Footer() {
             </a>
           </p>
           <p className="pt-2 leading-relaxed">
+            <span className="block text-ivory">{CONTACT.company}</span>
             {CONTACT.address.map((line) => (
               <span key={line} className="block">
                 {line}
@@ -73,7 +74,9 @@ export default function Footer() {
         <p className="translate-y-[18%] text-center font-serif text-[22vw] leading-none text-ivory/[0.04]">RUBIIK</p>
       </div>
       <div className="mx-auto flex max-w-[1600px] flex-col justify-between gap-2 border-t border-ivory/10 px-5 py-6 text-[11px] uppercase tracking-wide2 text-ivory-mute sm:flex-row sm:px-10">
-        <span>© {new Date().getFullYear()} RUBIIK</span>
+        <span>
+          © {new Date().getFullYear()} RUBIIK · A product by {CONTACT.company}
+        </span>
         <nav className="flex gap-6">
           <Link to="/privacy" className="transition-colors hover:text-gold">
             Privacy Policy
