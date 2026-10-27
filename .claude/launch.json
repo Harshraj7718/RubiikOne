@@ -4,8 +4,19 @@
     {
       "name": "rubiik-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev:open"],
+      "runtimeArgs": [
+        "run",
+        "dev:open"
+      ],
       "port": 5173
+    },
+    {
+      "name": "rubiik-prod",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "start"
+      ],
+      "port": 8787
     }
   ]
 }

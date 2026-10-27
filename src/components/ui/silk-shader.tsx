@@ -142,12 +142,10 @@ vec3 oklabToLin(vec3 c) {
     -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
     -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s);
 }
+// RUBIIK: with u_oklab on, u_colors are uploaded already converted to OKLab (see toOklab below),
+// so the palette mixes them directly and converts back to sRGB once per pixel instead of twice per
+// colour stop. Same colours, a fraction of the GPU work.
 vec3 mixColour(vec3 a, vec3 b, float t) {
-  if (u_oklab > 0.5) {
-    vec3 la = linToOklab(srgbToLinear(a));
-    vec3 lb = linToOklab(srgbToLinear(b));
-    return clamp(linearToSrgb(oklabToLin(mix(la, lb, t))), 0.0, 1.0);
-  }
   return mix(a, b, t);
 }
 
@@ -185,7 +183,9 @@ vec3 shade(vec2 uv, vec2 p, float t) {
     q.x += amp / i * cos(i * 2.4 * q.y + t * 0.8 + u_seed);
     q.y += amp / i * cos(i * 1.7 * q.x + t * 0.6);
   }
-  return palette(0.5 + 0.5 * sin(q.x + q.y));
+  vec3 col = palette(0.5 + 0.5 * sin(q.x + q.y));
+  if (u_oklab > 0.5) col = clamp(linearToSrgb(oklabToLin(col)), 0.0, 1.0);
+  return col;
 }
 
 void main() {
@@ -320,6 +320,26 @@ const UNIFORMS = {
   timeScale: 0.4,
 }
 
+// sRGB (0..1) → OKLab, matching the shader's srgbToLinear + linToOklab.
+function toOklab([r, g, b]: [number, number, number]): [number, number, number] {
+  const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
+  const [lr, lg, lb] = [lin(r), lin(g), lin(b)]
+  const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb)
+  const m = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb)
+  const s = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb)
+  return [
+    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+  ]
+}
+
+// RUBIIK: the silk is soft and slow, so phones render fewer pixels at 30 fps; nobody can tell,
+// and it leaves the GPU free for scrolling and the rest of the page.
+const SMALL_SCREEN = typeof window !== "undefined" && window.matchMedia("(max-width: 767px), (pointer: coarse)").matches
+const PIXEL_BUDGET = SMALL_SCREEN ? 250_000 : 600_000
+const FRAME_MS = SMALL_SCREEN ? 1000 / 30 : 0
+
 const pendingContextReleases = new WeakMap<HTMLCanvasElement, number>()
 
 export function ShaderBackground({ className }: { className?: string }) {
@@ -371,7 +391,8 @@ export function ShaderBackground({ className }: { className?: string }) {
       space: gl.getUniformLocation(program, "u_space"),
       cursor: gl.getUniformLocation(program, "u_cursor"),
     }
-    gl.uniform3fv(uni.colors, new Float32Array(UNIFORMS.colors.flat()))
+    const colors = UNIFORMS.oklab ? UNIFORMS.colors.map(toOklab) : UNIFORMS.colors
+    gl.uniform3fv(uni.colors, new Float32Array(colors.flat()))
     gl.uniform4f(
       uni.shape,
       UNIFORMS.scale,
@@ -430,11 +451,11 @@ export function ShaderBackground({ className }: { className?: string }) {
       const dpr = Math.min(window.devicePixelRatio || 1, 2)
       const rawWidth = Math.max(1, Math.round(bounds.width * dpr))
       const rawHeight = Math.max(1, Math.round(bounds.height * dpr))
-      // RUBIIK: the silk is a soft gradient, so ~1M rendered pixels (stretched to fill) looks the
-      // same as 2M while halving GPU work on large and high-density screens.
+      // RUBIIK: the silk is a soft gradient, so a capped number of rendered pixels (stretched to
+      // fill) looks the same as full resolution while cutting GPU work several times over.
       const pixelScale = Math.min(
         1,
-        Math.sqrt(1_000_000 / Math.max(1, rawWidth * rawHeight)),
+        Math.sqrt(PIXEL_BUDGET / Math.max(1, rawWidth * rawHeight)),
       )
       const width = Math.max(1, Math.round(rawWidth * pixelScale))
       const height = Math.max(1, Math.round(rawHeight * pixelScale))
@@ -528,6 +549,11 @@ export function ShaderBackground({ className }: { className?: string }) {
     function render(now: number) {
       raf = 0
       if (disposed || !visible || !inView) return
+      // Skip frames to hold the target frame rate on small screens.
+      if (FRAME_MS && lastNow !== null && now - lastNow < FRAME_MS - 1) {
+        requestRender()
+        return
+      }
       const dt = lastNow === null ? 0 : Math.min((now - lastNow) / 1000, 0.1)
       lastNow = now
       const follow = 1 - Math.exp(-12 * dt)

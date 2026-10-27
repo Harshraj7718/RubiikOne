@@ -60,6 +60,7 @@ export function Rangoli({ className = "" }) {
       viewBox="-200 -200 400 400"
       className={className}
       aria-hidden="true"
+      style={{ willChange: "transform" }}
       animate={reduce ? undefined : { rotate: 360 }}
       transition={{ duration: 160, repeat: Infinity, ease: "linear" }}
     >
@@ -135,22 +136,27 @@ export function GoldCoins({ count = 9, className = "" }) {
         // Fixed, evenly spread positions so the layout is stable between renders.
         const left = 6 + ((i * 37) % 88);
         const size = 10 + ((i * 5) % 9);
+        // Each coin rides a full-height column; translating the column by a percentage of its own
+        // height moves the coin the whole way down using only the GPU (no layout per frame).
         return (
-          <motion.span
+          <motion.div
             key={i}
-            className="absolute block rounded-full"
-            style={{
-              left: `${left}%`,
-              width: size,
-              height: size,
-              background: `radial-gradient(circle at 35% 30%, ${GOLD_LIGHT}, ${GOLD} 60%, #8a6a2e)`,
-              boxShadow: "0 0 10px rgba(236,210,156,0.45)",
-            }}
-            // top is a percentage of the block, so coins fall its full height whatever its size.
-            initial={{ top: "-5%", opacity: 0 }}
-            animate={{ top: ["-5%", "105%"], opacity: [0, 0.85, 0.85, 0], rotateY: [0, 360, 720] }}
+            className="absolute inset-x-0 top-0 h-full will-change-transform"
+            initial={{ y: "-6%", opacity: 0 }}
+            animate={{ y: ["-6%", "102%"], opacity: [0, 0.85, 0.85, 0] }}
             transition={{ duration: 9 + (i % 4) * 2, repeat: Infinity, delay: i * 1.3, ease: "linear" }}
-          />
+          >
+            <span
+              className="absolute top-0 block rounded-full"
+              style={{
+                left: `${left}%`,
+                width: size,
+                height: size,
+                background: `radial-gradient(circle at 35% 30%, ${GOLD_LIGHT}, ${GOLD} 60%, #8a6a2e)`,
+                boxShadow: "0 0 10px rgba(236,210,156,0.45)",
+              }}
+            />
+          </motion.div>
         );
       })}
     </div>
@@ -187,14 +193,17 @@ export function SilkBanner({ children, className = "" }) {
   const ripple = reduce ? {} : { animate: { d: SILK_FRAMES }, transition: { duration: 4.5, repeat: Infinity, ease: "linear" } };
   return (
     <motion.div
-      className="relative"
+      className="relative will-change-transform"
       animate={reduce ? undefined : { y: [0, -4, 0, 3, 0], rotate: [-0.6, 0.5, -0.3, 0.6, -0.6] }}
       transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
     >
+      {/* A soft shadow under the cloth. A static blurred shape is far cheaper than a drop-shadow
+          filter, which the browser would recompute on every frame of the ripple. */}
+      <div className="pointer-events-none absolute inset-x-4 -bottom-3 h-6 rounded-[50%] bg-black/50 blur-lg" />
       <svg
         viewBox="0 0 400 100"
         preserveAspectRatio="none"
-        className="pointer-events-none absolute -inset-x-3 -inset-y-2 h-[calc(100%+1rem)] w-[calc(100%+1.5rem)] drop-shadow-[0_14px_22px_rgba(0,0,0,0.55)]"
+        className="pointer-events-none absolute -inset-x-3 -inset-y-2 h-[calc(100%+1rem)] w-[calc(100%+1.5rem)]"
         aria-hidden="true"
       >
         <defs>

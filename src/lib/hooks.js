@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isFestive, LAUNCH } from "../data/catalog.js";
 
 /** Days/hours/minutes/seconds remaining until an ISO date, ticking every second. */
 export function useCountdown(iso) {
@@ -27,6 +28,23 @@ export function useMediaQuery(query) {
     return () => mq.removeEventListener("change", on);
   }, [query]);
   return matches;
+}
+
+/** Whether the Dhanteras theme is on; flips off by itself at the end of the festive window. */
+export function useFestive() {
+  const [on, setOn] = useState(() => isFestive());
+  const [check, setCheck] = useState(0);
+  useEffect(() => {
+    if (!on) return;
+    // setTimeout can't wait longer than ~24.8 days, so wait at most a day and check again.
+    const ms = Math.min(Date.parse(LAUNCH.festiveUntil) - Date.now(), 86_400_000);
+    const t = setTimeout(() => {
+      setOn(isFestive());
+      setCheck((n) => n + 1);
+    }, Math.max(0, ms));
+    return () => clearTimeout(t);
+  }, [on, check]);
+  return on;
 }
 
 export const pad = (n) => String(n).padStart(2, "0");

@@ -7,10 +7,10 @@ import { ease, Magnetic } from "../components/motion.jsx";
 import Particles from "../components/Particles.jsx";
 import GoldVeins from "../components/GoldVeins.jsx";
 import { ShaderBackground } from "@/components/ui/silk-shader";
-import { PRODUCTS, LAUNCH, formatINR, formatDate, unitPrice, isFestive, GST_LABEL } from "../data/catalog.js";
+import { PRODUCTS, LAUNCH, formatINR, formatDate, unitPrice, GST_LABEL } from "../data/catalog.js";
 import { Toran, Diya, SilkBanner } from "../components/Dhanteras.jsx";
 import { useShop } from "../lib/shop.jsx";
-import { useCountdown, pad } from "../lib/hooks.js";
+import { useCountdown, useFestive, pad } from "../lib/hooks.js";
 import { scrollToId } from "../App.jsx";
 
 const [AUTOMATIC, QUARTZ] = PRODUCTS;
@@ -46,9 +46,8 @@ export default function Hero({ ready }) {
   const backX = useSpring(useTransform(mx, [-0.5, 0.5], [-6, 6]), spring);
 
   const { phase, status } = useShop();
-  const t = useCountdown(phase === "teaser" ? status.launch.prebookOpens : status.launch.launch);
-  // Re-checked on every countdown tick, so the festive touch disappears by itself after 7 November.
-  const festive = isFestive();
+  // Turns itself off at the end of 7 November, so the hero goes back to normal without a reload.
+  const festive = useFestive();
 
   return (
     <section
@@ -79,7 +78,8 @@ export default function Hero({ ready }) {
           </motion.div>
         </motion.div>
       )}
-      <motion.div style={{ opacity: fade }} className="pointer-events-none absolute inset-0">
+      {/* will-change keeps the veins on their own layer, so fading them on scroll doesn't re-run their filters. */}
+      <motion.div style={{ opacity: fade }} className="pointer-events-none absolute inset-0 will-change-[opacity]">
         <GoldVeins corner="top-right" ready={ready} className="!top-16 h-auto w-[64vw] max-w-[560px] sm:!top-0 sm:w-[40vw] lg:w-[30vw]" />
         <GoldVeins corner="bottom-left" ready={ready} className="h-auto w-[56vw] max-w-[500px] sm:w-[36vw] lg:w-[26vw]" />
       </motion.div>
@@ -246,13 +246,23 @@ export default function Hero({ ready }) {
             <motion.p variants={item} className="mt-5 hidden text-[10px] uppercase tracking-[0.3em] text-ivory-mute sm:block lg:mt-8">
               {phase === "teaser" ? "Pre-booking opens in" : "Launch in"}{" "}
               <span className="ml-2 font-serif text-base normal-case tracking-normal text-ivory tabular-nums">
-                {t.days}d {pad(t.hours)}h {pad(t.minutes)}m {pad(t.seconds)}s
+                <Countdown iso={phase === "teaser" ? status.launch.prebookOpens : status.launch.launch} />
               </span>
             </motion.p>
           )}
         </motion.div>
       </div>
     </section>
+  );
+}
+
+// Only this text re-renders every second, not the whole hero.
+function Countdown({ iso }) {
+  const t = useCountdown(iso);
+  return (
+    <>
+      {t.days}d {pad(t.hours)}h {pad(t.minutes)}m {pad(t.seconds)}s
+    </>
   );
 }
 

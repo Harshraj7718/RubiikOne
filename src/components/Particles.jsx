@@ -1,7 +1,24 @@
 // Lightweight canvas particles: gently rising dust.
 // `tone` picks gold or white particles.
 // Pauses when off screen and renders a still frame for reduced-motion visitors.
+// Each particle is a pre-drawn glowing sprite: canvas shadowBlur per particle per frame is very slow.
 import { useEffect, useRef } from "react";
+
+// One soft glowing dot, drawn once per colour and stamped for every particle.
+function makeSprite(core, glow) {
+  const size = 32;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const g = c.getContext("2d");
+  const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  grad.addColorStop(0, core);
+  grad.addColorStop(0.18, core);
+  grad.addColorStop(0.32, glow);
+  grad.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, size, size);
+  return c;
+}
 
 export default function Particles({ tone = "gold", density = 1, className = "" }) {
   const ref = useRef(null);
@@ -16,6 +33,7 @@ export default function Particles({ tone = "gold", density = 1, className = "" }
     let parts = [];
     let raf = 0;
     let visible = true;
+    const sprite = tone === "white" ? makeSprite("rgba(249,249,249,1)", "rgba(255,255,255,0.35)") : makeSprite("rgba(236,210,156,1)", "rgba(201,164,100,0.45)");
 
     const spawn = (anywhere) => ({
       x: Math.random() * w,
@@ -25,7 +43,6 @@ export default function Particles({ tone = "gold", density = 1, className = "" }
       sway: Math.random() * Math.PI * 2,
       swaySpeed: 0.004 + Math.random() * 0.01,
       tw: Math.random() * Math.PI * 2,
-      gold: tone !== "white",
     });
 
     const resize = () => {
@@ -46,14 +63,12 @@ export default function Particles({ tone = "gold", density = 1, className = "" }
         p.y += p.vy;
         p.x += Math.sin(p.sway) * 0.25;
         if (p.y < -10) Object.assign(p, spawn(false));
-        const alpha = 0.35 + Math.sin(p.tw) * 0.3;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = p.gold ? `rgba(236,210,156,${alpha})` : `rgba(249,249,249,${alpha})`;
-        ctx.shadowBlur = p.gold ? 6 : 3;
-        ctx.shadowColor = p.gold ? "rgba(201,164,100,0.8)" : "rgba(255,255,255,0.6)";
-        ctx.fill();
+        // The sprite's bright core is ~36% of its width, so it's drawn ~5.5× the particle radius.
+        const d = p.r * 5.5;
+        ctx.globalAlpha = Math.max(0, 0.35 + Math.sin(p.tw) * 0.3);
+        ctx.drawImage(sprite, p.x - d / 2, p.y - d / 2, d, d);
       }
+      ctx.globalAlpha = 1;
     };
 
     const loop = () => {

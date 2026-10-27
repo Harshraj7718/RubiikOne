@@ -15,7 +15,6 @@ const fmt = (iso) => new Date(iso).toLocaleDateString("en-IN", { day: "numeric",
 export default function PreBook() {
   const { phase, status } = useShop();
   const target = phase === "teaser" ? LAUNCH.prebookOpens : LAUNCH.launch;
-  const t = useCountdown(target);
 
   const steps = [
     { date: "Today", title: "Discover", text: "Explore RUBIIK ONE and join the list.", active: phase === "teaser" },
@@ -57,28 +56,7 @@ export default function PreBook() {
         {/* Countdown */}
         {phase !== "launched" && (
           <FadeUp className="mx-auto mt-16 flex max-w-3xl justify-center gap-3 sm:gap-6">
-            {[
-              [t.days, "Days"],
-              [t.hours, "Hours"],
-              [t.minutes, "Minutes"],
-              [t.seconds, "Seconds"],
-            ].map(([v, l]) => (
-              <div key={l} className="frame-royal flex w-1/4 flex-col items-center bg-wine-900/60 py-6">
-                <AnimatePresence mode="popLayout">
-                  <motion.span
-                    key={v}
-                    className="font-serif text-4xl tabular-nums sm:text-6xl"
-                    initial={{ y: -24, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    exit={{ y: 24, opacity: 0 }}
-                    transition={{ duration: 0.45, ease }}
-                  >
-                    {pad(v)}
-                  </motion.span>
-                </AnimatePresence>
-                <span className="mt-2 font-sans text-[9px] uppercase tracking-[0.18em] text-ivory-mute sm:text-[11px] sm:tracking-mega">{l}</span>
-              </div>
-            ))}
+            <CountdownTiles iso={target} />
           </FadeUp>
         )}
         <p className="eyebrow mt-5 text-center">{phase === "teaser" ? "Until pre-booking opens" : phase === "prebook" ? "Until the launch" : ""}</p>
@@ -109,6 +87,33 @@ export default function PreBook() {
       </div>
     </section>
   );
+}
+
+// Only the four tiles re-render every second, not the whole section.
+function CountdownTiles({ iso }) {
+  const t = useCountdown(iso);
+  return [
+    [t.days, "Days"],
+    [t.hours, "Hours"],
+    [t.minutes, "Minutes"],
+    [t.seconds, "Seconds"],
+  ].map(([v, l]) => (
+    <div key={l} className="frame-royal flex w-1/4 flex-col items-center bg-wine-900/60 py-6">
+      <AnimatePresence mode="popLayout">
+        <motion.span
+          key={v}
+          className="font-serif text-4xl tabular-nums sm:text-6xl"
+          initial={{ y: -24, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 24, opacity: 0 }}
+          transition={{ duration: 0.45, ease }}
+        >
+          {pad(v)}
+        </motion.span>
+      </AnimatePresence>
+      <span className="mt-2 font-sans text-[9px] uppercase tracking-[0.18em] text-ivory-mute sm:text-[11px] sm:tracking-mega">{l}</span>
+    </div>
+  ));
 }
 
 // The launch date set as a headline, dressed for Dhanteras (the launch day): a marigold toran above,

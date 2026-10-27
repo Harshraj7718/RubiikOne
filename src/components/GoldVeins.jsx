@@ -31,6 +31,13 @@ const FLECKS = [
 ];
 
 // The artwork is drawn for the top-right corner; other corners mirror it.
+// Drawing the veins stroke by stroke re-runs the marble and roughness filters on every frame.
+// Large screens with a mouse handle that; phones and tablets get the finished artwork, faded in
+// as one composited layer (filters rendered once), which keeps scrolling smooth.
+const DRAW_IN =
+  typeof window !== "undefined" &&
+  window.matchMedia("(min-width: 1024px) and (pointer: fine) and (prefers-reduced-motion: no-preference)").matches;
+
 const CORNERS = {
   "top-right": { transform: undefined, aspect: "xMaxYMin meet", place: "right-0 top-0" },
   "top-left": { transform: "translate(600 0) scale(-1 1)", aspect: "xMinYMin meet", place: "left-0 top-0" },
@@ -48,14 +55,27 @@ export default function GoldVeins({ corner = "top-right", ready, seed = 7, class
   const seen = useInView(ref, { once: true, margin: "-10% 0px" });
   const active = ready ?? seen;
   const c = CORNERS[corner];
-  const draw = (delay, duration) => ({
-    initial: { pathLength: 0, opacity: 0 },
-    animate: active ? { pathLength: 1, opacity: 1 } : {},
-    transition: { pathLength: { duration, ease: [0.65, 0, 0.35, 1], delay }, opacity: { duration: 0.4, delay } },
-  });
+  // With DRAW_IN off, every part is shown as-is (empty props) and only the whole SVG fades in.
+  const anim = (props) => (DRAW_IN ? props : {});
+  const draw = (delay, duration) =>
+    anim({
+      initial: { pathLength: 0, opacity: 0 },
+      animate: active ? { pathLength: 1, opacity: 1 } : {},
+      transition: { pathLength: { duration, ease: [0.65, 0, 0.35, 1], delay }, opacity: { duration: 0.4, delay } },
+    });
 
   return (
-    <svg ref={ref} viewBox="0 0 600 600" preserveAspectRatio={c.aspect} className={`pointer-events-none absolute ${c.place} ${className}`} aria-hidden="true">
+    <motion.svg
+      ref={ref}
+      viewBox="0 0 600 600"
+      preserveAspectRatio={c.aspect}
+      className={`pointer-events-none absolute ${c.place} ${className}`}
+      style={DRAW_IN ? undefined : { willChange: "opacity" }}
+      initial={DRAW_IN ? false : { opacity: 0 }}
+      animate={DRAW_IN || active ? { opacity: 1 } : { opacity: 0 }}
+      transition={{ duration: 1.6, ease: "easeOut" }}
+      aria-hidden="true"
+    >
       <defs>
         {/* Smoky marble: fractal noise mapped to cool grey, with alpha from the noise itself */}
         <filter id={`marble-${id}`} x="0" y="0" width="100%" height="100%">
@@ -89,7 +109,7 @@ export default function GoldVeins({ corner = "top-right", ready, seed = 7, class
 
       <g transform={c.transform}>
         {/* Marble wash */}
-        <motion.g mask={`url(#mask-${id})`} initial={{ opacity: 0 }} animate={active ? { opacity: 1 } : {}} transition={{ duration: 2 }}>
+        <motion.g mask={`url(#mask-${id})`} {...anim({ initial: { opacity: 0 }, animate: active ? { opacity: 1 } : {}, transition: { duration: 2 } })}>
           <rect width="600" height="600" filter={`url(#marble-${id})`} />
           <rect width="600" height="600" filter={`url(#marble-${id})`} opacity="0.6" transform="translate(600 0) scale(-1 1)" />
         </motion.g>
@@ -102,9 +122,8 @@ export default function GoldVeins({ corner = "top-right", ready, seed = 7, class
           stroke="#d4ac62"
           strokeWidth="14"
           filter={`url(#glow-${id})`}
-          initial={{ opacity: 0 }}
-          animate={active ? { opacity: 0.3 } : {}}
-          transition={{ duration: 2, ease: "easeOut", delay: 2.4 }}
+          opacity={DRAW_IN ? undefined : 0.3}
+          {...anim({ initial: { opacity: 0 }, animate: active ? { opacity: 0.3 } : {}, transition: { duration: 2, ease: "easeOut", delay: 2.4 } })}
         />
 
         <g filter={`url(#rough-${id})`} fill="none" strokeLinecap="round">
@@ -125,14 +144,12 @@ export default function GoldVeins({ corner = "top-right", ready, seed = 7, class
             cy={cy}
             r={r}
             fill={`url(#gold-${id})`}
-            initial={{ scale: 0, opacity: 0 }}
-            animate={active ? { scale: 1, opacity: 1 } : {}}
-            transition={{ delay: 1.8 + i * 0.08, duration: 0.6 }}
+            {...anim({ initial: { scale: 0, opacity: 0 }, animate: active ? { scale: 1, opacity: 1 } : {}, transition: { delay: 1.8 + i * 0.08, duration: 0.6 } })}
             style={{ transformOrigin: `${cx}px ${cy}px` }}
           />
         ))}
       </g>
-    </svg>
+    </motion.svg>
   );
 }
 
