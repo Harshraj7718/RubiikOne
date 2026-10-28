@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useParams, Link, Navigate } from "react-router-dom";
 import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
-import { findProduct, PRODUCTS, formatINR, unitPrice, GST_LABEL } from "../data/catalog.js";
+import { findProduct, PRODUCTS, LAUNCH, formatINR, unitPrice, GST_LABEL } from "../data/catalog.js";
 import { useShop, MAX_PER_MODEL } from "../lib/shop.jsx";
 import { SplitReveal, FadeUp, Magnetic, ParallaxImage, ease } from "../components/motion.jsx";
 import { EdgeVeins } from "../components/GoldVeins.jsx";
@@ -19,7 +19,8 @@ export default function Product() {
 
   if (!p) return <Navigate to="/" replace />;
   const other = PRODUCTS.find((q) => q.slug !== p.slug);
-  const stock = status.stock;
+  // Whether this model can still be ordered (exact counts are not public).
+  const available = status.stock.byModel?.[p.slug]?.available !== false;
   const inCart = cart.find((l) => l.slug === p.slug)?.qty ?? 0;
   const canAdd = Math.max(0, MAX_PER_MODEL - inCart);
 
@@ -71,7 +72,7 @@ export default function Product() {
               ← The collection
             </Link>
             <p className="eyebrow mt-10" style={{ color: p.accent }}>
-              {p.finish} · One edition of {stock.total}
+              {p.finish} · A numbered edition of {LAUNCH.editionPerModel}
             </p>
             <h1 className="mt-3 font-serif text-6xl leading-none sm:text-7xl">
               <SplitReveal text={p.name} />
@@ -94,7 +95,7 @@ export default function Product() {
                 </p>
               </div>
               <p className="eyebrow ml-auto tabular-nums">
-                {stock.remaining} of {stock.total} remaining
+                {available ? "Very limited pieces left" : "Sold out"}
               </p>
             </div>
 
@@ -115,8 +116,8 @@ export default function Product() {
                     </button>
                   </div>
                   <Magnetic>
-                    <button className="btn-gold" disabled={!canAdd || stock?.remaining <= 0} onClick={() => add(p.slug, Math.min(qty, canAdd))}>
-                      {stock?.remaining <= 0
+                    <button className="btn-gold" disabled={!canAdd || !available} onClick={() => add(p.slug, Math.min(qty, canAdd))}>
+                      {!available
                         ? "Sold out"
                         : !canAdd
                           ? `Limit ${MAX_PER_MODEL} per client`

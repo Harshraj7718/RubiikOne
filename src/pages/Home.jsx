@@ -30,7 +30,7 @@ export default function Home({ ready }) {
       <Owners />
       <Marquee
         className="border-y border-ivory/10 py-5 font-sans text-[12px] uppercase tracking-mega text-ivory/60"
-        items={[`Limited to ${LAUNCH.editionSize} pieces`, ...launchNews, "Every second has a shape"]}
+        items={[`Limited to ${LAUNCH.editionPerModel} of each model`, ...launchNews, "Every second has a shape"]}
       />
       <Manifesto />
       <Collection />

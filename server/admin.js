@@ -1,13 +1,17 @@
 // Admin API: store overview, orders, customers, waitlist, owners-wall moderation and the media library.
-// Access uses one admin username and password (ADMIN_USERNAME / ADMIN_PASSWORD in the environment),
-// separate from customer accounts. A successful login gets its own short-lived, httpOnly session cookie.
+// Admins are separate from customer accounts. The account in the environment (ADMIN_USERNAME /
+// ADMIN_PASSWORD) is the built-in owner; owners can add team members (owner or staff) with their own
+// usernames and passwords. Each login gets its own short-lived, httpOnly session cookie, and every
+// sign-in and every change an admin makes is written to the activity log.
 import path from "node:path";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import express from "express";
-import { LAUNCH, PRODUCTS, couponLabel } from "../src/data/catalog.js";
-import { readCookie } from "./auth.js";
+import { LAUNCH, PRODUCTS, EDITION_TOTAL, couponLabel } from "../src/data/catalog.js";
+import { readCookie, hashPassword, verifyPassword } from "./auth.js";
+import { trySendMail, MAIL_MODE } from "./mailer.js";
+import { launchEmail } from "./emails.js";
 
 const ADMIN_COOKIE = "rbk_admin";
 const ADMIN_SESSION_HOURS = 12;
@@ -53,16 +57,42 @@ const shortName = (name = "") => {
   return last ? `${first} ${last[0].toUpperCase()}.` : first ?? "";
 };
 
-export function mountAdmin(app, { users, orders, waitlist, sessions, coupons }, { root, sendInvoice }) {
+export function mountAdmin(app, { users, orders, waitlist, sessions, coupons, admins, audit }, { root, sendDocument, dispatchOrder, siteUrl }) {
   const limitLogin = createLimiter({ max: 5, windowMs: 15 * 60 * 1000 });
+  const ENV_OWNER = () => process.env.ADMIN_USERNAME;
 
-  /** The signed-in admin for this request, or null. Admin sessions live in `sessions` with admin: true. */
+  /** Writes one activity-log entry. Never fails the request it records. */
+  async function record(req, action, target = null, details = null, who = req.admin) {
+    try {
+      await audit.insertOne({ at: new Date(), admin: who?.username ?? null, role: who?.role ?? null, action, target, details, ip: req.ip });
+    } catch (err) {
+      console.error("Activity log write failed:", err.message);
+    }
+  }
+
+  /**
+   * The signed-in admin for this request, or null. Admin sessions live in `sessions` with admin: true.
+   * Team members are re-checked on every request, so deactivating someone or changing their role
+   * takes effect at once.
+   */
   async function currentAdmin(req) {
     const token = readCookie(req, ADMIN_COOKIE);
     if (!token) return null;
     const session = await sessions.findOne({ hash: sha256(token).toString("hex"), admin: true, expiresAt: { $gt: new Date() } });
-    return session ? { username: session.username } : null;
+    if (!session) return null;
+    if (session.source !== "team") return { username: session.username, name: "Owner", role: "owner", builtIn: true };
+    const member = await admins.findOne({ _id: session.username, active: true });
+    return member ? { username: member._id, name: member.name, role: member.role, builtIn: false } : null;
   }
+
+  async function requireOwner(req, res, next) {
+    if (req.admin?.role !== "owner") return res.status(403).json({ error: "Only an owner can do this." });
+    next();
+  }
+
+  // Compared against when a username doesn't exist, so unknown and known usernames take equally long.
+  let dummyHash;
+  const DUMMY = async () => (dummyHash ??= await hashPassword(randomBytes(16).toString("hex")));
 
   async function requireAdmin(req, res, next) {
     try {
@@ -76,28 +106,77 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons }, 
   }
 
   app.post("/api/admin/login", async (req, res) => {
-    if (!adminConfigured()) return res.status(503).json({ error: "Admin login isn't set up. Add ADMIN_USERNAME and ADMIN_PASSWORD to the server environment." });
+    if (!adminConfigured() && !(await admins.countDocuments({ active: true }, { limit: 1 }))) {
+      return res.status(503).json({ error: "Admin login isn't set up. Add ADMIN_USERNAME and ADMIN_PASSWORD to the server environment." });
+    }
     if (!limitLogin(req.ip)) return res.status(429).json({ error: "Too many attempts. Please wait 15 minutes and try again." });
-    const username = String(req.body?.username ?? "");
+    const username = String(req.body?.username ?? "").trim();
     const password = String(req.body?.password ?? "");
-    // Check both, always, so a wrong username and a wrong password look the same.
-    const ok = sameSecret(username, process.env.ADMIN_USERNAME) & sameSecret(password, process.env.ADMIN_PASSWORD);
-    if (!ok) return res.status(401).json({ error: "That username and password don't match." });
+
+    // The built-in owner from the environment: both fields checked in constant time.
+    let who = null;
+    if (adminConfigured() && sameSecret(username, ENV_OWNER()) & sameSecret(password, process.env.ADMIN_PASSWORD)) {
+      who = { username: ENV_OWNER(), role: "owner", source: "env" };
+    } else {
+      // Team members: always run one password check, so a wrong username and a wrong password look the same.
+      const member = await admins.findOne({ _id: username.toLowerCase(), active: true });
+      const valid = await verifyPassword(password, member?.passwordHash ?? (await DUMMY()));
+      if (member && valid) who = { username: member._id, role: member.role, source: "team" };
+    }
+    if (!who) {
+      await record(req, "login.failed", username.slice(0, 40) || null, null, null);
+      return res.status(401).json({ error: "That username and password don't match." });
+    }
     const token = randomBytes(32).toString("base64url");
-    await sessions.insertOne({ hash: sha256(token).toString("hex"), admin: true, username: process.env.ADMIN_USERNAME, expiresAt: new Date(Date.now() + ADMIN_SESSION_HOURS * 3600000) });
+    await sessions.insertOne({ hash: sha256(token).toString("hex"), admin: true, username: who.username, source: who.source, expiresAt: new Date(Date.now() + ADMIN_SESSION_HOURS * 3600000) });
+    if (who.source === "team") await admins.updateOne({ _id: who.username }, { $set: { lastLoginAt: new Date() } });
     setAdminCookie(res, token, ADMIN_SESSION_HOURS * 3600);
-    res.json({ admin: { username: process.env.ADMIN_USERNAME } });
+    await record(req, "login", null, null, who);
+    res.json({ admin: await currentAdmin({ headers: { cookie: `${ADMIN_COOKIE}=${encodeURIComponent(token)}` } }) });
   });
 
   app.post("/api/admin/logout", async (req, res) => {
+    const who = await currentAdmin(req);
     const token = readCookie(req, ADMIN_COOKIE);
     if (token) await sessions.deleteOne({ hash: sha256(token).toString("hex"), admin: true });
     setAdminCookie(res, "", 0);
+    if (who) await record(req, "logout", null, null, who);
     res.json({ ok: true });
   });
 
+  // Activity log for every successful admin change, export and document view. One hook here covers
+  // all admin routes, so a new route is logged as soon as it is listed in AUDITED.
+  const AUDITED = [
+    [/^POST \/api\/admin\/coupons$/, () => "coupon.create", (req, m, body) => body?.coupon?.code, (req) => ({ type: req.body?.type, value: req.body?.value, maxUses: req.body?.maxUses || null, expiresAt: req.body?.expiresAt || null })],
+    [/^PATCH \/api\/admin\/coupons\/([^/]+)$/, (req) => (req.body?.active ? "coupon.resume" : "coupon.pause"), (req, m) => decodeURIComponent(m[1]).toUpperCase()],
+    [/^DELETE \/api\/admin\/coupons\/([^/]+)$/, () => "coupon.delete", (req, m) => decodeURIComponent(m[1]).toUpperCase()],
+    [/^PATCH \/api\/admin\/orders\/([^/]+)\/wall$/, () => "wall.update", (req, m) => m[1], (req) => ({ show: req.body?.show, displayName: req.body?.displayName })],
+    [/^POST \/api\/admin\/orders\/([^/]+)\/dispatch$/, () => "order.dispatch", (req, m) => m[1], (req, m, body) => ({ courier: req.body?.courier, tracking: req.body?.tracking, invoice: body?.invoiceNumber, email: body?.email })],
+    [/^GET \/api\/admin\/orders\/([^/]+)\/(receipt|invoice)$/, (req, m) => `document.${m[2]}`, (req, m) => m[1]],
+    [/^GET \/api\/admin\/(orders|waitlist)\.csv$/, (req, m) => `export.${m[1]}`, () => null, (req) => (Object.keys(req.query).length ? req.query : null)],
+    [/^POST \/api\/admin\/emails\/launch$/, () => "email.launch", () => null, (req, m, body) => ({ sent: body?.sent, failed: body?.failed, remaining: body?.remaining, mode: body?.mode })],
+    [/^POST \/api\/admin\/team$/, () => "team.add", (req) => String(req.body?.username ?? "").toLowerCase(), (req) => ({ role: req.body?.role })],
+    [/^PATCH \/api\/admin\/team\/([^/]+)$/, () => "team.update", (req, m) => decodeURIComponent(m[1]), (req) => ({ active: req.body?.active, role: req.body?.role, passwordReset: req.body?.password ? true : undefined })],
+    [/^POST \/api\/admin\/password$/, () => "account.password", () => null],
+  ];
+  app.use("/api/admin", (req, res, next) => {
+    const key = `${req.method} ${req.originalUrl.split("?")[0]}`;
+    const rule = AUDITED.find(([re]) => re.test(key));
+    if (!rule) return next();
+    const [re, action, target, details] = rule;
+    let body;
+    const json = res.json.bind(res);
+    res.json = (data) => ((body = data), json(data));
+    res.on("finish", () => {
+      if (res.statusCode >= 400 || !req.admin) return;
+      const m = key.match(re);
+      record(req, action(req, m, body), target(req, m, body) ?? null, details ? details(req, m, body) : null);
+    });
+    next();
+  });
+
   app.get("/api/admin/me", async (req, res) => {
-    res.json({ admin: await currentAdmin(req), configured: adminConfigured() });
+    res.json({ admin: await currentAdmin(req), configured: adminConfigured() || (await admins.countDocuments({ active: true }, { limit: 1 })) > 0 });
   });
 
   // An unpaid order whose hold has lapsed is reported as expired.
@@ -114,7 +193,10 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons }, 
     compareAt: o.compareAt,
     gst: o.gst ?? 0,
     total: orderTotal(o),
+    receiptNumber: o.receipt?.number ?? null,
     invoiceNumber: o.invoice?.number ?? null,
+    dispatch: o.dispatch ?? null,
+    emails: o.emails ?? {},
     coupon: o.coupon ? { code: o.coupon.code, discount: o.coupon.discount } : null,
     wall: o.wall,
     certificates: o.certificates ?? [],
@@ -132,7 +214,9 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons }, 
       edition: p.edition,
       accent: p.accent,
       paid: paid.flatMap((o) => o.items).filter((i) => i.slug === p.slug).reduce((n, i) => n + i.qty, 0),
-    }));
+      held: held.flatMap((o) => o.items).filter((i) => i.slug === p.slug).reduce((n, i) => n + i.qty, 0),
+      total: LAUNCH.editionPerModel,
+    })).map((m) => ({ ...m, remaining: Math.max(0, m.total - m.paid - m.held) }));
     // Paid pieces per day for the last 14 days (IST calendar days).
     const day = (d) => new Date(new Date(d).getTime() + 5.5 * 3600000).toISOString().slice(0, 10);
     const days = Array.from({ length: 14 }, (_, i) => day(now - (13 - i) * 86400000));
@@ -141,7 +225,7 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons }, 
       pieces: paid.filter((o) => day(o.payment?.paidAt ?? o.createdAt) === d).reduce((n, o) => n + o.items.reduce((m, i) => m + i.qty, 0), 0),
     }));
     res.json({
-      edition: { total: LAUNCH.editionSize, sold: pieces(paid), held: pieces(held), remaining: Math.max(0, LAUNCH.editionSize - pieces(paid) - pieces(held)) },
+      edition: { total: EDITION_TOTAL, perModel: LAUNCH.editionPerModel, sold: pieces(paid), held: pieces(held), remaining: Math.max(0, EDITION_TOTAL - pieces(paid) - pieces(held)) },
       revenue: { paid: paid.reduce((n, o) => n + orderTotal(o), 0), pending: held.reduce((n, o) => n + orderTotal(o), 0) },
       counts: {
         customers: await users.countDocuments(),
@@ -175,7 +259,7 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons }, 
 
   app.get("/api/admin/orders.csv", requireAdmin, async (req, res) => {
     const list = await findOrders(req.query);
-    const rows = [["Order", "Created", "Status", "Name", "Email", "Phone", "Address", "City", "PIN", "Items", "Total incl. GST (INR)", "Coupon", "Serials", "On wall", "Payment ref"]];
+    const rows = [["Order", "Created", "Status", "Name", "Email", "Phone", "Address", "City", "PIN", "Items", "Total incl. GST (INR)", "Coupon", "Receipt no.", "Invoice no.", "Dispatched", "Tracking", "Serials", "On wall", "Payment ref"]];
     for (const o of list) {
       rows.push([
         o.id,
@@ -190,6 +274,10 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons }, 
         o.items.map((i) => `${i.qty}x ${i.name}`).join("; "),
         o.total,
         o.coupon ? `${o.coupon.code} (-${o.coupon.discount})` : "",
+        o.receiptNumber ?? "",
+        o.invoiceNumber ?? "",
+        o.dispatch?.at ? new Date(o.dispatch.at).toISOString().slice(0, 10) : "",
+        o.dispatch ? [o.dispatch.courier, o.dispatch.tracking].filter(Boolean).join(" ") : "",
         o.certificates.map((c) => c.serial).join("; "),
         o.wall?.show ? o.wall.displayName : "",
         o.payment?.reference ?? "",
@@ -232,8 +320,140 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons }, 
   });
 
   // Owners wall moderation: show or hide a paid order's card.
-  app.get("/api/admin/orders/:id/invoice", requireAdmin, async (req, res) => {
-    await sendInvoice(res, await orders.findOne({ _id: req.params.id }), { download: req.query.download === "1" });
+  for (const kind of ["receipt", "invoice"]) {
+    app.get(`/api/admin/orders/:id/${kind}`, requireAdmin, async (req, res) => {
+      await sendDocument(res, await orders.findOne({ _id: req.params.id }), kind, { download: req.query.download === "1" });
+    });
+  }
+
+  // Dispatch: issues the tax invoice and emails it with the tracking details.
+  app.post("/api/admin/orders/:id/dispatch", requireAdmin, async (req, res) => {
+    try {
+      const { order, email } = await dispatchOrder(req.params.id, req.body ?? {}, req);
+      res.json({ ok: true, invoiceNumber: order.invoice.number, email: email.failed ? "failed" : email.sent ? "sent" : "logged" });
+    } catch (err) {
+      if (!err.status) throw err;
+      res.status(err.status).json({ error: err.message });
+    }
+  });
+
+  // ---------- Launch email ----------
+  // Goes to every pre-order owner and everyone on the waitlist, once each. It is sent in small
+  // batches (each call sends up to LAUNCH_BATCH and reports what's left) so a request never runs
+  // longer than the hosting time limit; the dashboard keeps calling until nothing is left.
+  const LAUNCH_BATCH = 12;
+  async function launchRecipients() {
+    const ownerIds = await orders.distinct("userId", { status: "paid" });
+    const owners = await users.find({ _id: { $in: ownerIds } }, { projection: { name: 1, email: 1, launchEmailAt: 1 } }).toArray();
+    const ownerEmails = new Set(owners.map((u) => u.email));
+    const list = await waitlist.find({}, { projection: { email: 1, launchEmailAt: 1 } }).toArray();
+    return [
+      ...owners.map((u) => ({ kind: "owner", id: u._id, email: u.email, name: u.name, sent: Boolean(u.launchEmailAt) })),
+      // Owners who also joined the waitlist get only the owner email.
+      ...list.filter((w) => !ownerEmails.has(w.email)).map((w) => ({ kind: "waitlist", id: w._id, email: w.email, name: "", sent: Boolean(w.launchEmailAt) })),
+    ];
+  }
+
+  app.get("/api/admin/emails/launch", requireAdmin, async (_req, res) => {
+    const all = await launchRecipients();
+    res.json({ mode: MAIL_MODE, total: all.length, sent: all.filter((r) => r.sent).length, owners: all.filter((r) => r.kind === "owner").length });
+  });
+
+  app.post("/api/admin/emails/launch", requireAdmin, async (req, res) => {
+    const pending = (await launchRecipients()).filter((r) => !r.sent);
+    let sent = 0;
+    let failed = 0;
+    for (const r of pending.slice(0, LAUNCH_BATCH)) {
+      const mail = launchEmail({ name: r.name, owner: r.kind === "owner" }, { siteUrl: siteUrl(req) });
+      const result = await trySendMail({ to: r.email, ...mail });
+      if (result.failed) {
+        failed++;
+        continue;
+      }
+      sent++;
+      const now = new Date();
+      if (r.kind === "owner") {
+        await users.updateOne({ _id: r.id }, { $set: { launchEmailAt: now } });
+        await waitlist.updateOne({ email: r.email }, { $set: { launchEmailAt: now } });
+      } else await waitlist.updateOne({ _id: r.id }, { $set: { launchEmailAt: now } });
+    }
+    res.json({ sent, failed, remaining: Math.max(0, pending.length - sent - failed), mode: MAIL_MODE });
+  });
+
+  // ---------- Team ----------
+  const USERNAME = /^[a-z0-9._-]{3,32}$/;
+  const ROLES = ["owner", "staff"];
+  const teamRow = (a) => ({ username: a._id, name: a.name, role: a.role, active: a.active, createdAt: a.createdAt, createdBy: a.createdBy, lastLoginAt: a.lastLoginAt ?? null, builtIn: false });
+
+  app.get("/api/admin/team", requireAdmin, requireOwner, async (_req, res) => {
+    const list = await admins.find({}).sort({ createdAt: 1 }).toArray();
+    const builtIn = adminConfigured() ? [{ username: ENV_OWNER(), name: "Owner", role: "owner", active: true, builtIn: true }] : [];
+    res.json({ team: [...builtIn, ...list.map(teamRow)] });
+  });
+
+  app.post("/api/admin/team", requireAdmin, requireOwner, async (req, res) => {
+    const username = String(req.body?.username ?? "").trim().toLowerCase();
+    const name = String(req.body?.name ?? "").trim().slice(0, 60);
+    const password = String(req.body?.password ?? "");
+    const role = ROLES.includes(req.body?.role) ? req.body.role : "staff";
+    if (!USERNAME.test(username)) return res.status(400).json({ error: "Usernames use 3–32 lower-case letters, numbers, dots, dashes or underscores." });
+    if (adminConfigured() && username === ENV_OWNER().toLowerCase()) return res.status(409).json({ error: "That username is the built-in owner." });
+    if (name.length < 2) return res.status(400).json({ error: "Please enter their name." });
+    if (password.length < 12) return res.status(400).json({ error: "Use a password of at least 12 characters." });
+    try {
+      await admins.insertOne({ _id: username, name, role, active: true, passwordHash: await hashPassword(password), createdAt: new Date(), createdBy: req.admin.username });
+    } catch (err) {
+      if (err.code === 11000) return res.status(409).json({ error: `The username ${username} is already taken.` });
+      throw err;
+    }
+    res.status(201).json({ member: teamRow(await admins.findOne({ _id: username })) });
+  });
+
+  // Owners change a member's role, deactivate or reactivate them, or set a new password.
+  // Deactivating or resetting a password signs that person out everywhere.
+  app.patch("/api/admin/team/:username", requireAdmin, requireOwner, async (req, res) => {
+    const username = String(req.params.username).toLowerCase();
+    const member = await admins.findOne({ _id: username });
+    if (!member) return res.status(404).json({ error: "Team member not found." });
+    const $set = {};
+    if (typeof req.body?.active === "boolean") $set.active = req.body.active;
+    if (ROLES.includes(req.body?.role)) $set.role = req.body.role;
+    if (req.body?.password) {
+      if (String(req.body.password).length < 12) return res.status(400).json({ error: "Use a password of at least 12 characters." });
+      $set.passwordHash = await hashPassword(String(req.body.password));
+    }
+    if (username === req.admin.username && ($set.active === false || $set.role === "staff")) {
+      return res.status(400).json({ error: "You can't deactivate or demote your own account." });
+    }
+    if (!Object.keys($set).length) return res.status(400).json({ error: "Nothing to change." });
+    await admins.updateOne({ _id: username }, { $set });
+    if ($set.active === false || $set.passwordHash) await sessions.deleteMany({ admin: true, source: "team", username });
+    res.json({ member: teamRow(await admins.findOne({ _id: username })) });
+  });
+
+  // Team members change their own password (the built-in owner's lives in the environment).
+  app.post("/api/admin/password", requireAdmin, async (req, res) => {
+    if (req.admin.builtIn) return res.status(400).json({ error: "The built-in owner's password is set in the server environment (ADMIN_PASSWORD)." });
+    const member = await admins.findOne({ _id: req.admin.username });
+    if (!(await verifyPassword(String(req.body?.current ?? ""), member.passwordHash))) return res.status(401).json({ error: "Your current password isn't right." });
+    const next = String(req.body?.next ?? "");
+    if (next.length < 12) return res.status(400).json({ error: "Use a password of at least 12 characters." });
+    await admins.updateOne({ _id: member._id }, { $set: { passwordHash: await hashPassword(next) } });
+    // Sign out other sessions of this account; this one stays.
+    const token = readCookie(req, ADMIN_COOKIE);
+    await sessions.deleteMany({ admin: true, source: "team", username: member._id, hash: { $ne: sha256(token).toString("hex") } });
+    res.json({ ok: true });
+  });
+
+  // ---------- Activity log ----------
+  app.get("/api/admin/activity", requireAdmin, requireOwner, async (req, res) => {
+    const filter = {};
+    if (req.query.admin) filter.admin = String(req.query.admin);
+    if (req.query.action) filter.action = { $regex: `^${String(req.query.action).replace(/[^a-z._]/g, "")}` };
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 200));
+    const entries = await audit.find(filter).sort({ at: -1 }).limit(limit).toArray();
+    const people = await audit.distinct("admin");
+    res.json({ entries: entries.map(({ _id, ...e }) => e), admins: people.filter(Boolean) });
   });
 
   // ---------- Coupons ----------

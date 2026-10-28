@@ -21,7 +21,8 @@ export function ShopProvider({ children }) {
   const [status, setStatus] = useState(() => ({
     phase: phaseAt(),
     launch: LAUNCH,
-    stock: { total: LAUNCH.editionSize, reserved: 0, remaining: LAUNCH.editionSize, byModel: Object.fromEntries(PRODUCTS.map((p) => [p.slug, 0])) },
+    // Only availability is public; exact counts are shown in the admin dashboard alone.
+    stock: { byModel: Object.fromEntries(PRODUCTS.map((p) => [p.slug, { available: true }])) },
     loaded: false,
   }));
 

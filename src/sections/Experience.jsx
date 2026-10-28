@@ -30,7 +30,7 @@ export default function Experience() {
             {[
               ["5", "ATM"],
               ["100%", "Stainless steel"],
-              ["200", "Pieces"],
+              ["2 × 200", "Numbered pieces"],
             ].map(([n, l]) => (
               <div key={l}>
                 <p className="font-serif text-4xl text-gold">{n}</p>

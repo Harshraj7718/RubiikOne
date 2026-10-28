@@ -6,7 +6,27 @@ import { useAuth } from "../lib/auth.jsx";
 import { formatINR } from "../data/catalog.js";
 import AuthForm from "../components/AuthForm.jsx";
 import Certificate from "../components/Certificate.jsx";
+import DeliveryNote from "../components/DeliveryNote.jsx";
 import { ease } from "../components/motion.jsx";
+
+const dispatchLine = (d) => {
+  if (!d) return "Preparing for delivery";
+  const day = new Date(d.at).toLocaleDateString("en-IN", { day: "numeric", month: "long" });
+  return `Dispatched ${day}${d.tracking ? ` · ${[d.courier, d.tracking].filter(Boolean).join(" ")}` : ""}`;
+};
+
+function DocLink({ href, label }) {
+  return (
+    <span className="flex items-center gap-3">
+      <a href={href} target="_blank" rel="noreferrer" className="hover:text-gold">
+        {label}
+      </a>
+      <a href={`${href}?download=1`} className="text-gold hover:text-gold-light">
+        PDF
+      </a>
+    </span>
+  );
+}
 
 export default function Account() {
   const { user, ready, logout } = useAuth();
@@ -60,6 +80,7 @@ export default function Account() {
         </div>
       ) : (
         <div className="mt-8 grid gap-10">
+          <DeliveryNote />
           {certificates.map((c, i) => (
             <motion.div key={c.serial} initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1, ease, delay: i * 0.15 }}>
               <Certificate cert={c} name={c.ownerName} size="lg" />
@@ -70,20 +91,21 @@ export default function Account() {
 
       {paidOrders.length > 0 && (
         <div className="mt-16">
-          <h2 className="font-serif text-2xl">Invoices</h2>
+          <h2 className="font-serif text-2xl">Orders &amp; documents</h2>
           {paidOrders.map((o) => (
-            <div key={o.id} className="mt-4 flex flex-wrap items-center justify-between gap-4 border-b border-ivory/10 py-4 text-ivory-dim">
-              <span>
-                <span className="text-ivory">{o.invoiceNumber ?? o.id}</span> · {o.items.map((i) => `${i.qty}× ${i.name.replace("RUBIIK ONE ", "")}`).join(", ")} · {formatINR(o.total)}
-              </span>
-              <span className="flex gap-5 text-[11px] uppercase tracking-[0.2em]">
-                <a href={`/api/orders/${o.id}/invoice`} target="_blank" rel="noreferrer" className="hover:text-gold">
-                  View
-                </a>
-                <a href={`/api/orders/${o.id}/invoice?download=1`} className="text-gold hover:text-gold-light">
-                  Download PDF
-                </a>
-              </span>
+            <div key={o.id} className="mt-4 border-b border-ivory/10 py-4 text-ivory-dim">
+              <p>
+                <span className="text-ivory">{o.id}</span> · {o.items.map((i) => `${i.qty}× ${i.name.replace("RUBIIK ONE ", "")}`).join(", ")} · {formatINR(o.total)}
+              </p>
+              <p className="mt-1 text-sm">{dispatchLine(o.dispatch)}</p>
+              <div className="mt-3 flex flex-wrap gap-x-8 gap-y-2 text-[11px] uppercase tracking-[0.2em]">
+                <DocLink href={`/api/orders/${o.id}/receipt`} label={`Receipt voucher${o.receiptNumber ? ` ${o.receiptNumber}` : ""}`} />
+                {o.invoiceNumber ? (
+                  <DocLink href={`/api/orders/${o.id}/invoice`} label={`Tax invoice ${o.invoiceNumber}`} />
+                ) : (
+                  <span className="text-ivory-mute">Tax invoice · on dispatch</span>
+                )}
+              </div>
             </div>
           ))}
         </div>

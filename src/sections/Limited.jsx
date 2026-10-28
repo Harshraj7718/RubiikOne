@@ -1,7 +1,8 @@
-// Limited edition: the "200" counts up, with live remaining stock for the shared edition.
+// Limited edition: the "200" counts up; each model has its own numbered edition of 200 (400 in all),
+// each shown as available ("Very limited pieces left") or sold out; exact counts are not public.
 import { useEffect, useRef, useState } from "react";
 import { motion, useInView, animate, useScroll, useTransform } from "framer-motion";
-import { PRODUCTS } from "../data/catalog.js";
+import { PRODUCTS, LAUNCH, EDITION_TOTAL } from "../data/catalog.js";
 import { useShop } from "../lib/shop.jsx";
 import { FadeUp, ease } from "../components/motion.jsx";
 import { Chapter, Divider } from "../components/Ornament.jsx";
@@ -16,7 +17,7 @@ export default function Limited() {
 
   useEffect(() => {
     if (!inView) return;
-    const c = animate(0, 200, { duration: 2.4, ease, onUpdate: (v) => setN(Math.round(v)) });
+    const c = animate(0, LAUNCH.editionPerModel, { duration: 2.4, ease, onUpdate: (v) => setN(Math.round(v)) });
     return () => c.stop();
   }, [inView]);
 
@@ -36,42 +37,34 @@ export default function Limited() {
         <p className="mt-6 font-serif text-[38vw] leading-[0.8] tabular-nums sm:text-[26vw]">
           <span className="text-gold">{n}</span>
         </p>
-        <p className="mt-2 font-serif text-3xl italic sm:text-5xl">numbered pieces. Never more.</p>
+        <p className="mt-2 font-serif text-3xl italic sm:text-5xl">numbered pieces of each. Never more.</p>
         <Divider className="mt-8" width="w-20 sm:w-40" />
         <FadeUp className="mx-auto mt-8 max-w-xl text-ivory-dim">
-          200 pieces in total, shared across the Automatic and the Quartz. Each is individually numbered and arrives with its own certificate of edition.
-          Once the 200 are gone, the design is retired.
+          {LAUNCH.editionPerModel} Automatic Skeletons and {LAUNCH.editionPerModel} Quartz Olives, {EDITION_TOTAL} pieces in all. Each is individually numbered within its
+          model and arrives with its own certificate of edition. Once a model's {LAUNCH.editionPerModel} are gone, it is retired.
         </FadeUp>
 
-        {/* One shared edition: a single bar, split by which model each piece went to */}
-        <FadeUp className="frame-royal mx-auto mt-16 max-w-3xl bg-night/60 p-6 text-left backdrop-blur sm:p-8">
-          <div className="flex items-baseline justify-between">
-            <span className="font-serif text-2xl">The edition</span>
-            <span className="eyebrow tabular-nums text-gold">
-              {stock.remaining}/{stock.total} left
-            </span>
-          </div>
-          <div className="mt-5 flex h-[3px] w-full overflow-hidden bg-ivory/10">
-            {PRODUCTS.map((p) => (
-              <motion.div
-                key={p.slug}
-                className="h-full"
-                style={{ background: p.accent }}
-                initial={{ width: 0 }}
-                whileInView={{ width: `${((stock.byModel?.[p.slug] ?? 0) / stock.total) * 100}%` }}
-                viewport={{ once: true }}
-                transition={{ duration: 1.6, ease }}
-              />
-            ))}
-          </div>
-          <div className="mt-4 flex flex-wrap gap-x-8 gap-y-2 text-xs uppercase tracking-wide2 text-ivory-mute">
-            {PRODUCTS.map((p) => (
-              <span key={p.slug} className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full" style={{ background: p.accent }} />
-                {p.edition} · {stock.byModel?.[p.slug] ?? 0} reserved
-              </span>
-            ))}
-          </div>
+        {/* Two editions, one per model. Availability only; exact counts stay private. */}
+        <FadeUp className="frame-royal mx-auto mt-16 max-w-3xl space-y-7 bg-night/60 p-6 text-left backdrop-blur sm:p-8">
+          {PRODUCTS.map((p) => {
+            const available = stock.byModel?.[p.slug]?.available !== false;
+            return (
+              <div key={p.slug}>
+                <div className="flex items-baseline justify-between gap-4">
+                  <span className="flex items-center gap-3 font-serif text-2xl">
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: p.accent }} />
+                    {p.edition}
+                  </span>
+                  <span className={`eyebrow flex items-center gap-2 whitespace-nowrap ${available ? "text-gold" : "text-ivory-mute"}`}>
+                    {available && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold" />}
+                    {available ? "Very limited pieces left" : "Sold out"}
+                  </span>
+                </div>
+                <div className="mt-3 h-px w-full bg-gradient-to-r from-transparent via-gold/40 to-transparent" />
+                <p className="mt-2 text-xs uppercase tracking-wide2 text-ivory-mute">Numbered No. 001–{String(LAUNCH.editionPerModel).padStart(3, "0")}</p>
+              </div>
+            );
+          })}
         </FadeUp>
       </div>
     </section>

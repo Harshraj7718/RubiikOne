@@ -50,7 +50,7 @@ The server connects at startup and creates the indexes it needs.
 | `MONGODB_DNS` | Optional DNS servers for the `mongodb+srv` lookup if the system resolver refuses SRV queries (default fallback `1.1.1.1,8.8.8.8`) |
 
 Reservations and payment confirmations run in transactions that all touch one edition document, so concurrent buyers
-can never over-sell the edition or receive the same number. In Atlas, allow your server's IP under **Network Access**.
+can never over-sell a model's edition or receive the same number. In Atlas, allow your server's IP under **Network Access**.
 
 Production: `npm run build` then `npm start` (Express serves `dist/` and the API on `API_PORT`, default 8787).
 Set `NODE_ENV=production` there so session cookies are marked `Secure`.
@@ -59,11 +59,12 @@ Set `NODE_ENV=production` there so session cookies are marked `Secure`.
 
 | Setting | Value |
 | --- | --- |
-| Pieces | 200 in total, shared by both models (`LAUNCH.editionSize`) |
+| Pieces | 200 of each model, 400 in total (`LAUNCH.editionPerModel`); each model is numbered No. 001–200 on its own |
 | Price (MRP, incl. GST) | Automatic Skeleton ₹49,999 · Quartz Olive ₹39,999 |
 | GST | 18%, included in the price (`LAUNCH.gstRate`); invoices show the GST inside each amount |
 | Pre-booking | open now (since 24 Oct 2026) — 20% off: ₹39,999 and ₹31,999 (incl. GST) |
 | Launch | 6 Nov 2026, 00:00 IST |
+| Delivery | from 25 Dec 2026 (`LAUNCH.deliveryFrom`), shown after payment, in the account, on the invoice and in the Terms |
 | Limit | 2 per model per order |
 
 Phases are decided by the server: **teaser** (before pre-booking opens: countdown + "Notify me" waitlist),
@@ -78,7 +79,9 @@ Prices and stock are always recomputed on the server.
 3. **Payment** — the order holds its pieces for 30 minutes while payment completes.
 4. **Certificate of Edition** — once payment is verified, each watch gets the next number in the shared edition and a serial such as `RBK-AS-017-7F3C` (model code, number, keyed check code). Customers see their certificates on `/account`.
 
-5. **Invoice** — once payment is verified the order gets the next GST invoice number for the financial year (`RBK/26-27/0001`, …). Customers download the PDF from the confirmation page and **/account → Invoices**; admins from the order details. The invoice shows the seller (`src/data/legal.js`: company, address, GSTIN), HSN 9102, serials, and CGST + SGST for buyers in Uttar Pradesh or IGST elsewhere (the buyer's state is asked at checkout). Built on the server with PDFKit (`server/invoice.js`).
+5. **GST documents and email** — when payment is verified the order gets a **receipt voucher** for the advance (`RV/26-27/0001`, …) and the customer is emailed a confirmation with it attached. When the admin marks the order **dispatched** (courier and tracking), a **tax invoice** is issued (`RBK/26-27/0001`, …) and emailed. Both PDFs are in **/account → Orders & documents** and in the admin order details. Documents show the seller (`src/data/legal.js`), HSN 9102, serials, and CGST + SGST for buyers in Uttar Pradesh or IGST elsewhere. Built with PDFKit (`server/invoice.js`); emails in `server/emails.js`, sent by `server/mailer.js`.
+6. **Password reset** — "Forgot password?" on the sign-in form emails a one-time link (`/reset-password#…`, valid 30 minutes); saving a new password signs out every other session.
+7. **Launch email** — admin → Waitlist → "Send launch email" announces the launch to every owner and waitlist address, once each, in batches.
 
 The **Founding Owners wall** (right after the hero) shows certificates of owners who opted in, with only their chosen display name.
 
@@ -87,14 +90,19 @@ The **Founding Owners wall** (right after the hero) shows certificates of owners
 | Environment variable | Purpose |
 | --- | --- |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | Enables real Razorpay Checkout; every payment is verified by its signature |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | Sends email from support@rubiikone.com; without them emails are printed to the server log |
+| `SITE_URL` | The public address used in email links (e.g. `https://rubiikone.com`) |
 | `SERIAL_SECRET` | Key for serial check codes (optional; otherwise one is generated and kept in the data file) |
 
 Without the Razorpay keys the store runs in **test mode**: the payment step is clearly labelled and simulates a successful payment, so no money is ever charged.
 
 ## Admin dashboard (`/admin`)
 
-The dashboard has its own sign-in: one admin username and password, set as `ADMIN_USERNAME` and `ADMIN_PASSWORD`
-in `.env` (and in Vercel's Environment Variables). It is separate from customer accounts. A successful sign-in gets a
+The dashboard has its own sign-in, separate from customer accounts. `ADMIN_USERNAME` and `ADMIN_PASSWORD` in `.env`
+(and in Vercel's Environment Variables) are the **built-in owner**. Owners add team members under **Team**, each with their
+own username and password, as **owner** (also manages the team and reads the activity log) or **staff** (everything
+else). Deactivating someone or resetting their password signs them out at once. **Activity** lists every sign-in
+(including failed ones), change, export and document opened, with who, when and from which IP. A successful sign-in gets a
 12-hour httpOnly session; failed attempts are limited to 5 per 15 minutes; every `/api/admin/*` route checks the session
 on the server. To change the password, edit the variable and restart (or redeploy on Vercel).
 
@@ -105,6 +113,7 @@ on the server. To change the password, edit the variable and restart (or redeplo
 | Customers | Accounts with orders, pieces, spend and serials |
 | Coupons | Create discount codes (percentage or fixed ₹, optional usage limit and expiry), pause or delete them, see uses and discount given |
 | Waitlist | "Notify me" emails, CSV export |
+| Team · Activity · My account | Team members and roles (owners), the activity log (owners), your own password |
 | Owners wall | Show or hide each paid order's card, edit its display name |
 | Media library | Every image the site uses (with the files that use it) and the original brand files (admin-only) |
 | Design system | Live colour palette, typography, logo, ornaments, buttons and the certificate card |

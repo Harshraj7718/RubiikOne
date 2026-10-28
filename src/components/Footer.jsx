@@ -25,7 +25,7 @@ export default function Footer() {
         </div>
         <div className="space-y-3 text-sm text-ivory-dim">
           <p className="eyebrow mb-5 text-ivory">The edition</p>
-          <p>RUBIIK ONE · 200 numbered pieces across both models</p>
+          <p>RUBIIK ONE · 200 numbered pieces of each model</p>
           {phase !== "launched" && <p>Pre-booking · {phase === "prebook" ? "open now" : `from ${formatDate(LAUNCH.prebookOpens)}`}</p>}
           <p>
             {phase === "launched" ? "Launched" : "Launch"} · {formatDate(LAUNCH.launch, { year: "numeric" })}
@@ -57,7 +57,7 @@ export default function Footer() {
               </span>
             ))}
           </p>
-          <p className="text-ivory-mute">{CONTACT.hours}</p>
+          {CONTACT.hours && <p className="text-ivory-mute">{CONTACT.hours}</p>}
         </address>
       </div>
       <div className="relative select-none overflow-hidden">

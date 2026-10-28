@@ -7,12 +7,14 @@ export const LAUNCH = {
   launch: "2026-11-06T00:00:00+05:30",
   // The launch falls on Dhanteras; the hero wears its festive touch until the end of 7 November.
   festiveUntil: "2026-11-08T00:00:00+05:30",
+  // Watches are shipped to owners from this date, after the launch.
+  deliveryFrom: "2026-12-25T00:00:00+05:30",
   prebookDiscount: 0.2,
   // Prices below are MRPs, inclusive of 18% GST: customers pay exactly the price shown.
   gstRate: 0.18,
   currency: "INR",
-  // One numbered edition shared by both models: 200 pieces in total.
-  editionSize: 200,
+  // Each model has its own numbered edition: Automatic Skeleton No. 001–200 and Quartz Olive No. 001–200.
+  editionPerModel: 200,
 };
 
 export const PRODUCTS = [
@@ -89,6 +91,9 @@ export const PRODUCTS = [
 ];
 
 export const findProduct = (slug) => PRODUCTS.find((p) => p.slug === slug);
+
+/** All pieces across both models (2 × 200 = 400). */
+export const EDITION_TOTAL = LAUNCH.editionPerModel * PRODUCTS.length;
 
 /** Which sales window we are in at a given moment. */
 export function phaseAt(now = Date.now(), forceOpen = false) {

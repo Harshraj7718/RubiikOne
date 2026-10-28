@@ -204,7 +204,7 @@ export default function Hero({ ready }) {
             Precision in every dimension
           </motion.p>
           <motion.p variants={item} className="mx-auto mt-4 hidden max-w-md text-ivory-dim sm:block lg:mx-0 lg:mt-6">
-            An automatic skeleton and a quartz olive, sharing one numbered edition of only {LAUNCH.editionSize} pieces.{" "}
+            An automatic skeleton and a quartz olive, each in its own numbered edition of only {LAUNCH.editionPerModel} pieces.{" "}
             {phase === "teaser"
               ? `Pre-booking opens on ${formatDate(LAUNCH.prebookOpens)}; the edition launches on ${formatDate(LAUNCH.launch)}.`
               : phase === "prebook"

@@ -16,7 +16,7 @@
   "functions": {
     "api/index.js": {
       "maxDuration": 15,
-      "includeFiles": "{public/images/**,brand-source/**,src/**,node_modules/pdfkit/js/data/**}"
+      "includeFiles": "{public/images/**,brand-source/**,src/**,node_modules/pdfkit/js/data/**,node_modules/@expo-google-fonts/noto-sans/400Regular/NotoSans_400Regular.ttf,node_modules/@expo-google-fonts/noto-sans/700Bold/NotoSans_700Bold.ttf}"
     }
   },
   "headers": [

@@ -11,6 +11,9 @@ import Coupons from "./Coupons.jsx";
 import Wall from "./Wall.jsx";
 import Media from "./Media.jsx";
 import Design from "./Design.jsx";
+import Team from "./Team.jsx";
+import Activity from "./Activity.jsx";
+import MyAccount from "./MyAccount.jsx";
 
 const LINKS = [
   ["", "Overview"],
@@ -21,6 +24,9 @@ const LINKS = [
   ["wall", "Owners wall"],
   ["media", "Media library"],
   ["design", "Design system"],
+  ["team", "Team", "owner"],
+  ["activity", "Activity", "owner"],
+  ["me", "My account"],
 ];
 
 export default function AdminApp() {
@@ -40,7 +46,9 @@ export default function AdminApp() {
 
   if (!state.checked) return <div className="min-h-screen bg-night-900" />;
   if (!state.admin) return <AdminLogin configured={state.configured} onLogin={(admin) => setState((s) => ({ ...s, admin }))} />;
-  const user = { email: state.admin.username };
+  const me = state.admin;
+  // Team and Activity are for owners only; the server enforces this too.
+  const links = LINKS.filter(([, , role]) => !role || role === me.role);
 
   return (
     <div className="min-h-screen bg-night-900 lg:grid lg:grid-cols-[250px_1fr]">
@@ -58,7 +66,7 @@ export default function AdminApp() {
           </Link>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-3 pb-3 [scrollbar-width:none] lg:flex-col lg:px-4 lg:pb-0 [&::-webkit-scrollbar]:hidden">
-          {LINKS.map(([to, label]) => (
+          {links.map(([to, label]) => (
             <NavLink
               key={to}
               to={to ? `/admin/${to}` : "/admin"}
@@ -74,7 +82,10 @@ export default function AdminApp() {
           ))}
         </nav>
         <div className="hidden px-7 py-8 text-xs text-ivory-mute lg:absolute lg:bottom-0 lg:block">
-          <p className="truncate">{user.email}</p>
+          <p className="truncate text-ivory-dim">{me.name}</p>
+          <p className="truncate">
+            {me.username} · <span className="capitalize">{me.builtIn ? "owner" : me.role}</span>
+          </p>
           <div className="mt-3 flex gap-4 uppercase tracking-[0.2em]">
             <Link to="/" className="hover:text-gold">
               View site
@@ -96,6 +107,9 @@ export default function AdminApp() {
           <Route path="wall" element={<Wall />} />
           <Route path="media" element={<Media />} />
           <Route path="design" element={<Design />} />
+          {me.role === "owner" && <Route path="team" element={<Team me={me} />} />}
+          {me.role === "owner" && <Route path="activity" element={<Activity />} />}
+          <Route path="me" element={<MyAccount me={me} />} />
         </Routes>
       </main>
     </div>

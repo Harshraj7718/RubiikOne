@@ -15,7 +15,7 @@ export default function Overview() {
         {d && (
           <div className="space-y-6">
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <Stat label="Pieces sold" value={`${d.edition.sold} / ${d.edition.total}`} hint={`${d.edition.held} held awaiting payment · ${d.edition.remaining} available`} />
+              <Stat label="Pieces sold" value={`${d.edition.sold} / ${d.edition.total}`} hint={`${d.edition.perModel} per model · ${d.edition.held} held · ${d.edition.remaining} available`} />
               <Stat label="Revenue (paid)" value={formatINR(d.revenue.paid)} hint={d.revenue.pending ? `${formatINR(d.revenue.pending)} awaiting payment` : "Nothing awaiting payment"} />
               <Stat label="Customers" value={d.counts.customers} hint={`${d.counts.paidOrders} paid order${d.counts.paidOrders === 1 ? "" : "s"}`} />
               <Stat label="Waitlist" value={d.counts.waitlist} hint={`${d.counts.onWall} order${d.counts.onWall === 1 ? "" : "s"} shown on the owners wall`} />
@@ -23,29 +23,25 @@ export default function Overview() {
 
             <div className="grid gap-6 xl:grid-cols-2">
               <Panel title="The edition">
-                <div className="flex h-3 w-full overflow-hidden bg-ivory/10">
-                  {d.byModel.map((m) => (
-                    <div key={m.slug} style={{ width: `${(m.paid / d.edition.total) * 100}%`, background: m.accent }} />
-                  ))}
-                  <div className="bg-gold/40" style={{ width: `${(d.edition.held / d.edition.total) * 100}%` }} />
-                </div>
-                <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
+                {/* One edition of 200 per model: sold, held awaiting payment, and what's left */}
+                <div className="space-y-6">
                   {d.byModel.map((m) => (
                     <div key={m.slug}>
-                      <p className="flex items-center gap-2 text-ivory-dim">
-                        <span className="h-2 w-2 rounded-full" style={{ background: m.accent }} />
-                        {m.edition}
-                      </p>
-                      <p className="mt-1 font-serif text-2xl">{m.paid}</p>
+                      <div className="flex items-baseline justify-between gap-3 text-sm">
+                        <span className="flex items-center gap-2 text-ivory">
+                          <span className="h-2 w-2 rounded-full" style={{ background: m.accent }} />
+                          {m.edition}
+                        </span>
+                        <span className="tabular-nums text-ivory-dim">
+                          <span className="font-serif text-2xl text-ivory">{m.paid}</span> sold · {m.held} held · {m.remaining} left of {m.total}
+                        </span>
+                      </div>
+                      <div className="mt-2 flex h-3 w-full overflow-hidden bg-ivory/10">
+                        <div style={{ width: `${(m.paid / m.total) * 100}%`, background: m.accent }} />
+                        <div className="bg-gold/40" style={{ width: `${(m.held / m.total) * 100}%` }} />
+                      </div>
                     </div>
                   ))}
-                  <div>
-                    <p className="flex items-center gap-2 text-ivory-dim">
-                      <span className="bg-gold/60 h-2 w-2 rounded-full" />
-                      Held
-                    </p>
-                    <p className="mt-1 font-serif text-2xl">{d.edition.held}</p>
-                  </div>
                 </div>
               </Panel>
 

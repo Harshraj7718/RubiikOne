@@ -54,7 +54,7 @@ export default function Design() {
             <div>
               <p className="text-[10px] uppercase tracking-[0.25em] text-ivory-mute">Body & UI · {fonts.sans[0].replace(/"/g, "")}</p>
               <p className="mt-3 text-lg leading-relaxed text-ivory-dim">
-                RUBIIK ONE — an automatic skeleton and a quartz olive, sharing one numbered edition of only 200 pieces.
+                RUBIIK ONE — an automatic skeleton and a quartz olive, each in a numbered edition of only 200 pieces.
               </p>
               <p className="eyebrow mt-4">Eyebrow label · The signature collection</p>
               <p className="mt-3 text-sm text-ivory-mute">Aa Bb Cc 0123456789 ₹46,000</p>

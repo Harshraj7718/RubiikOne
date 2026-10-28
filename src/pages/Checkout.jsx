@@ -4,12 +4,13 @@ import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useShop } from "../lib/shop.jsx";
 import { useAuth, shortName } from "../lib/auth.jsx";
-import { formatINR, LAUNCH, totalsFor } from "../data/catalog.js";
+import { formatINR, formatDate, LAUNCH, totalsFor } from "../data/catalog.js";
 import { STATES } from "../data/states.js";
 import { Emblem } from "../components/Logo.jsx";
 import { ease } from "../components/motion.jsx";
 import AuthForm from "../components/AuthForm.jsx";
 import Certificate from "../components/Certificate.jsx";
+import DeliveryNote from "../components/DeliveryNote.jsx";
 import { scrollTop } from "../App.jsx";
 
 const FIELDS = [
@@ -263,6 +264,7 @@ function Payment({ pending, busy, error, onTestPay, onRazorpay }) {
       <h1 className="mt-8 font-serif text-5xl sm:text-6xl">Complete your payment.</h1>
       <p className="mt-4 max-w-lg text-ivory-dim">
         Order <span className="text-ivory">{order.id}</span>. Your pieces are held for you until {holdUntil}. Your certificate and serial number are issued the moment payment completes.
+       Delivery begins from {formatDate(LAUNCH.deliveryFrom, { year: "numeric" })}.
       </p>
 
       {payment.provider === "test" ? (
@@ -302,7 +304,7 @@ function Summary({ cart, totals: { subtotal, compareTotal, couponCode, couponDis
         <Row label="MRP" value={formatINR(compareTotal)} />
         {compareTotal > subtotal && <Row label="Pre-booking privilege (20%)" value={`− ${formatINR(compareTotal - subtotal)}`} gold />}
         {couponDiscount > 0 && <Row label={`Coupon ${couponCode}`} value={`− ${formatINR(couponDiscount)}`} gold />}
-        <Row label="Insured delivery" value="Complimentary" />
+        <Row label="Insured delivery" value={`Complimentary · from ${formatDate(LAUNCH.deliveryFrom, { month: "short" })}`} />
       </div>
       {couponBox}
       <div className="mt-6 flex items-baseline justify-between border-t border-ivory/10 pt-6">
@@ -392,10 +394,11 @@ function Confirmation({ order }) {
         <p className="eyebrow mt-8 text-gold">Payment received · {order.id}</p>
         <h1 className="mt-4 font-serif text-5xl sm:text-6xl">Welcome, {order.customer.name.split(" ")[0]}.</h1>
         <p className="mx-auto mt-5 max-w-xl text-lg text-ivory-dim">
-          {order.certificates.length > 1 ? "Your pieces are" : "Your piece is"} officially part of the edition. Delivery follows the launch on{" "}
-          {new Date(LAUNCH.launch).toLocaleDateString("en-IN", { day: "numeric", month: "long" })}.
-          {order.wall?.show ? ` Your card now appears on the Founding Owners wall as “${order.wall.displayName}”.` : ""}
+          {order.certificates.length > 1 ? "Your pieces are" : "Your piece is"} officially part of the edition.
+          {order.wall?.show ? ` Your card now appears on the Founding Owners wall as “${order.wall.displayName}”.` : ""} A confirmation with your
+          receipt voucher is on its way to your email; your tax invoice follows when your watch is dispatched.
         </p>
+        <DeliveryNote className="mx-auto mt-8" />
       </motion.div>
 
       <div className="mx-auto mt-14 grid max-w-5xl gap-10">
@@ -410,8 +413,8 @@ function Confirmation({ order }) {
         <Link to="/account" className="btn-gold">
           View my collection
         </Link>
-        <a href={`/api/orders/${order.id}/invoice?download=1`} className="btn-ghost">
-          Download invoice (PDF)
+        <a href={`/api/orders/${order.id}/receipt?download=1`} className="btn-ghost">
+          Download receipt (PDF)
         </a>
         <Link to="/#owners" className="btn-ghost">
           See the owners wall

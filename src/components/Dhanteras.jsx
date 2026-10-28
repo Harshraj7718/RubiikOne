@@ -190,7 +190,8 @@ const SILK_FRAMES = [0, 1, 2, 3, 4, 5, 6].map((k) => silkPath((k / 6) * Math.PI 
 export function SilkBanner({ children, className = "" }) {
   const reduce = useReducedMotion();
   const id = useId().replace(/:/g, "");
-  const ripple = reduce ? {} : { animate: { d: SILK_FRAMES }, transition: { duration: 4.5, repeat: Infinity, ease: "linear" } };
+  // An explicit starting shape: without it the animation briefly sets d="undefined" on the first frame.
+  const ripple = reduce ? {} : { initial: { d: SILK_FRAMES[0] }, animate: { d: SILK_FRAMES }, transition: { duration: 4.5, repeat: Infinity, ease: "linear" } };
   return (
     <motion.div
       className="relative will-change-transform"

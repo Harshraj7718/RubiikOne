@@ -7,13 +7,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 import { randomUUID, randomBytes, createHmac } from "node:crypto";
-import { PRODUCTS, LAUNCH, findProduct, phaseAt, unitPrice, totalsFor, formatDate, couponLabel } from "../src/data/catalog.js";
+import { PRODUCTS, LAUNCH, EDITION_TOTAL, findProduct, phaseAt, unitPrice, totalsFor, formatDate, couponLabel } from "../src/data/catalog.js";
 import { connectDb } from "./db.js";
 import { stateCode } from "../src/data/states.js";
 import { mountAuth } from "./auth.js";
 import { mountAdmin, createLimiter } from "./admin.js";
 import { PAYMENT_MODE, startPayment, verifyPayment } from "./payments.js";
-import { invoicePdf } from "./invoice.js";
+import { invoicePdf, receiptPdf } from "./invoice.js";
+import { trySendMail, MAIL_MODE } from "./mailer.js";
+import { orderConfirmationEmail, dispatchEmail } from "./emails.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const FORCE_PREBOOK = process.argv.includes("--force-prebook") || process.env.FORCE_PREBOOK === "1";
@@ -53,22 +55,56 @@ export async function createApp({ serveClient = true } = {}) {
   // gzip text responses (HTML, JS, CSS, JSON). Images are already compressed and are skipped.
   app.use(compression());
   app.use(express.json({ limit: "32kb" }));
-  const { requireUser } = mountAuth(app, store);
-  mountAdmin(app, store, { root, sendInvoice });
+  // Absolute links in emails. SITE_URL in production; otherwise the address the request came in on.
+  const siteUrl = (req) => (process.env.SITE_URL || `${req.protocol}://${req.get("host")}`).replace(/\/$/, "");
+
+  const { requireUser } = mountAuth(app, store, { siteUrl });
+  mountAdmin(app, store, { root, sendDocument, dispatchOrder, siteUrl });
 
   const phase = () => phaseAt(Date.now(), FORCE_PREBOOK);
   // Orders that currently claim pieces: paid ones, and unpaid ones whose hold hasn't lapsed.
   const holdingFilter = () => ({ $or: [{ status: "paid" }, { status: "pending_payment", holdUntil: { $gt: new Date() } }] });
 
-  /** Both models draw from one numbered edition; paid orders and live holds count against it. */
+  /**
+   * Each model has its own edition of LAUNCH.editionPerModel pieces; paid orders and live holds
+   * count against their model. Totals across both models are included for the overall figures.
+   */
   async function stockView({ session, excludeOrderId } = {}) {
     const match = excludeOrderId ? { $and: [holdingFilter(), { _id: { $ne: excludeOrderId } }] } : holdingFilter();
     const rows = await orders
       .aggregate([{ $match: match }, { $unwind: "$items" }, { $group: { _id: "$items.slug", qty: { $sum: "$items.qty" } } }], { session })
       .toArray();
-    const byModel = Object.fromEntries(PRODUCTS.map((p) => [p.slug, rows.find((r) => r._id === p.slug)?.qty ?? 0]));
-    const reserved = Object.values(byModel).reduce((a, b) => a + b, 0);
-    return { total: LAUNCH.editionSize, reserved, remaining: Math.max(0, LAUNCH.editionSize - reserved), byModel };
+    const per = LAUNCH.editionPerModel;
+    const byModel = Object.fromEntries(
+      PRODUCTS.map((p) => {
+        const reserved = rows.find((r) => r._id === p.slug)?.qty ?? 0;
+        return [p.slug, { total: per, reserved, remaining: Math.max(0, per - reserved) }];
+      }),
+    );
+    const reserved = Object.values(byModel).reduce((n, m) => n + m.reserved, 0);
+    return { total: EDITION_TOTAL, reserved, remaining: Math.max(0, EDITION_TOTAL - reserved), byModel };
+  }
+
+  /**
+   * Per-model numbering replaced one shared counter. The first time it's needed, each model's
+   * counter starts from the highest number already issued for that model, so no number repeats.
+   */
+  async function ensureModelCounters(session) {
+    const edition = await meta.findOne({ _id: "edition" }, { session });
+    if (edition?.issuedBy) return;
+    const rows = await orders
+      .aggregate([{ $match: { status: "paid" } }, { $unwind: "$certificates" }, { $group: { _id: "$certificates.slug", max: { $max: "$certificates.number" } } }], { session })
+      .toArray();
+    const issuedBy = Object.fromEntries(PRODUCTS.map((p) => [p.code, rows.find((r) => r._id === p.slug)?.max ?? 0]));
+    await meta.updateOne({ _id: "edition" }, { $set: { issuedBy } }, { session, upsert: true });
+  }
+
+  /** Throws a readable 409 if any line asks for more pieces of its model than are left. */
+  function checkModelStock(stock, lines, message) {
+    for (const line of lines) {
+      const left = stock.byModel[line.slug].remaining;
+      if (line.qty > left) throw fail(409, message(findProduct(line.slug), left));
+    }
   }
 
   /**
@@ -79,15 +115,17 @@ export async function createApp({ serveClient = true } = {}) {
   const lockEdition = (session) => meta.updateOne({ _id: "edition" }, { $inc: { version: 1 } }, { upsert: true, session });
 
   /**
-   * Invoice numbers run without gaps within each Indian financial year (April–March), e.g.
-   * RBK/26-27/0001, from a counter per year in the meta collection.
+   * GST document numbers run without gaps within each Indian financial year (April–March), from a
+   * counter per year in the meta collection: receipt vouchers RV/26-27/0001 (at payment) and tax
+   * invoices RBK/26-27/0001 (at dispatch).
    */
-  async function nextInvoiceNumber(date, session) {
+  const DOC_PREFIX = { receipt: "RV", invoice: "RBK" };
+  async function nextDocNumber(kind, date, session) {
     const ist = new Date(date.getTime() + 5.5 * 3600000);
     const start = ist.getUTCMonth() >= 3 ? ist.getUTCFullYear() : ist.getUTCFullYear() - 1;
     const fy = `${String(start).slice(2)}-${String(start + 1).slice(2)}`;
-    const counter = await meta.findOneAndUpdate({ _id: `invoice:${fy}` }, { $inc: { seq: 1 } }, { upsert: true, session, returnDocument: "after" });
-    return `RBK/${fy}/${String(counter.seq).padStart(4, "0")}`;
+    const counter = await meta.findOneAndUpdate({ _id: `${kind}:${fy}` }, { $inc: { seq: 1 } }, { upsert: true, session, returnDocument: "after" });
+    return `${DOC_PREFIX[kind]}/${fy}/${String(counter.seq).padStart(4, "0")}`;
   }
 
   /** Secret for serial check codes: SERIAL_SECRET, or one generated once and kept in the database. */
@@ -113,7 +151,9 @@ export async function createApp({ serveClient = true } = {}) {
     gst: o.gst ?? 0,
     total: o.total ?? o.subtotal,
     coupon: o.coupon ? { code: o.coupon.code, discount: o.coupon.discount } : null,
+    receiptNumber: o.receipt?.number ?? null,
     invoiceNumber: o.invoice?.number ?? null,
+    dispatch: o.dispatch ? { at: o.dispatch.at, courier: o.dispatch.courier ?? null, tracking: o.dispatch.tracking ?? null } : null,
     customer: { name: o.customer.name, city: o.customer.city },
     wall: o.wall,
     certificates: o.certificates ?? [],
@@ -155,7 +195,10 @@ export async function createApp({ serveClient = true } = {}) {
   });
 
   app.get("/api/status", async (_req, res) => {
-    res.json({ phase: phase(), forced: FORCE_PREBOOK, paymentMode: PAYMENT_MODE, serverTime: new Date().toISOString(), launch: LAUNCH, stock: await stockView() });
+    // Public: only whether each model can still be ordered. Exact counts stay in the admin dashboard.
+    const stock = await stockView();
+    const byModel = Object.fromEntries(Object.entries(stock.byModel).map(([slug, m]) => [slug, { available: m.remaining > 0 }]));
+    res.json({ phase: phase(), forced: FORCE_PREBOOK, paymentMode: PAYMENT_MODE, serverTime: new Date().toISOString(), launch: LAUNCH, stock: { byModel } });
   });
 
   const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -213,8 +256,7 @@ export async function createApp({ serveClient = true } = {}) {
       const order = await withTransaction(async (session) => {
         await lockEdition(session);
         const stock = await stockView({ session });
-        const wanted = lines.reduce((n, l) => n + l.qty, 0);
-        if (stock.remaining < wanted) throw fail(409, stock.remaining ? `Only ${stock.remaining} pieces of the edition remain.` : "The edition is fully reserved.");
+        checkModelStock(stock, lines, (p, left) => (left ? `Only ${left} ${p.edition} ${left === 1 ? "piece remains" : "pieces remain"}.` : `The ${p.edition} edition is fully reserved.`));
         // The coupon is re-checked inside the transaction, so its usage limit holds under concurrent orders.
         const coupon = String(couponCode).trim() ? await usableCoupon(couponCode, { session }) : null;
         const totals = totalsFor(
@@ -265,25 +307,35 @@ export async function createApp({ serveClient = true } = {}) {
         await lockEdition(session);
         // A hold that lapsed can still complete if the edition has room for it.
         const stock = await stockView({ session, excludeOrderId: o._id });
-        const wanted = o.items.reduce((n, i) => n + i.qty, 0);
-        if (stock.remaining < wanted) throw fail(409, "The edition filled up before payment completed. You will not be charged.");
+        checkModelStock(stock, o.items, (p) => `The ${p.edition} edition filled up before payment completed. You will not be charged.`);
 
-        // Numbers follow the order in which payments complete, from a counter in the edition document.
-        const edition = await meta.findOneAndUpdate({ _id: "edition" }, { $inc: { issued: wanted } }, { session, returnDocument: "after" });
-        let next = edition.issued - wanted + 1;
+        // Each model numbers its own pieces (No. 001–200), in the order payments complete, from a
+        // counter per model code in the edition document (issuedBy.AS, issuedBy.QO).
+        await ensureModelCounters(session);
+        const $inc = {};
+        for (const line of o.items) $inc[`issuedBy.${findProduct(line.slug).code}`] = ($inc[`issuedBy.${findProduct(line.slug).code}`] ?? 0) + line.qty;
+        const edition = await meta.findOneAndUpdate({ _id: "edition" }, { $inc }, { session, returnDocument: "after" });
+        const next = Object.fromEntries(Object.entries($inc).map(([k, qty]) => [k.split(".")[1], edition.issuedBy[k.split(".")[1]] - qty + 1]));
         const issuedAt = new Date();
         const certificates = o.items.flatMap((line) => {
           const product = findProduct(line.slug);
           return Array.from({ length: line.qty }, () => {
-            const number = next++;
+            const number = next[product.code]++;
             return { serial: makeSerial(secret, product, number, o._id), number, slug: product.slug, model: `${product.name} ${product.edition}`, ownerName: o.customer.name, issuedAt };
           });
         });
         const payment = { ...o.payment, ...proof, paidAt: issuedAt };
-        const invoice = { number: await nextInvoiceNumber(issuedAt, session), date: issuedAt };
-        await orders.updateOne({ _id: o._id }, { $set: { status: "paid", certificates, payment, invoice } }, { session });
-        return { ...o, status: "paid", certificates, payment, invoice };
+        // The advance is acknowledged with a receipt voucher; the tax invoice follows on dispatch.
+        const receipt = { number: await nextDocNumber("receipt", issuedAt, session), date: issuedAt };
+        await orders.updateOne({ _id: o._id }, { $set: { status: "paid", certificates, payment, receipt } }, { session });
+        return { ...o, status: "paid", certificates, payment, receipt, justPaid: true };
       });
+      // Confirmation email with the receipt attached, once per order. A mail failure never fails the payment.
+      if (order.justPaid) {
+        const mail = orderConfirmationEmail(order, { siteUrl: siteUrl(req) });
+        const result = await trySendMail({ to: order.customer.email, ...mail, attachments: [{ filename: docFile(order, "receipt"), content: await receiptPdf(order) }] });
+        await orders.updateOne({ _id: order._id }, { $set: { "emails.confirmation": { at: new Date(), mode: MAIL_MODE, ok: !result.failed } } });
+      }
       res.json({ order: orderView(order) });
     } catch (err) {
       if (!err.status) console.error(err);
@@ -291,35 +343,62 @@ export async function createApp({ serveClient = true } = {}) {
     }
   });
 
+  const docFile = (o, kind) => `RUBIIK-${kind === "receipt" ? "receipt" : "invoice"}-${o[kind].number.replaceAll("/", "-")}.pdf`;
+
   /**
-   * Sends the GST invoice PDF for a paid order. Orders paid before invoices existed get their
-   * number now, in a transaction, so numbering stays sequential.
+   * Sends a paid order's receipt voucher or tax invoice as a PDF. A paid order from before receipts
+   * existed gets its receipt number now (in a transaction, so numbering stays sequential). The tax
+   * invoice exists only once the order has been dispatched.
    */
-  async function sendInvoice(res, o, { download = false } = {}) {
+  async function sendDocument(res, o, kind, { download = false } = {}) {
     if (!o) return res.status(404).json({ error: "Order not found." });
-    if (o.status !== "paid") return res.status(409).json({ error: "An invoice is issued once payment is complete." });
-    if (!o.invoice) {
-      o.invoice = await withTransaction(async (session) => {
+    if (o.status !== "paid") return res.status(409).json({ error: "Documents are issued once payment is complete." });
+    if (kind === "invoice" && !o.invoice) return res.status(409).json({ error: "The tax invoice is issued when your watch is dispatched." });
+    if (kind === "receipt" && !o.receipt) {
+      o.receipt = await withTransaction(async (session) => {
         const fresh = await orders.findOne({ _id: o._id }, { session });
-        if (fresh.invoice) return fresh.invoice;
-        const invoice = { number: await nextInvoiceNumber(new Date(fresh.payment?.paidAt ?? fresh.createdAt), session), date: new Date(fresh.payment?.paidAt ?? fresh.createdAt) };
-        await orders.updateOne({ _id: o._id }, { $set: { invoice } }, { session });
-        return invoice;
+        if (fresh.receipt) return fresh.receipt;
+        const date = new Date(fresh.payment?.paidAt ?? fresh.createdAt);
+        const receipt = { number: await nextDocNumber("receipt", date, session), date };
+        await orders.updateOne({ _id: o._id }, { $set: { receipt } }, { session });
+        return receipt;
       });
     }
-    const pdf = await invoicePdf(o);
-    const file = `RUBIIK-invoice-${o.invoice.number.replaceAll("/", "-")}.pdf`;
+    const pdf = kind === "receipt" ? await receiptPdf(o) : await invoicePdf(o);
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `${download ? "attachment" : "inline"}; filename="${file}"`);
+    res.setHeader("Content-Disposition", `${download ? "attachment" : "inline"}; filename="${docFile(o, kind)}"`);
     res.setHeader("Cache-Control", "private, no-store");
     res.send(pdf);
   }
 
-  // Customers can only fetch invoices for their own orders.
-  app.get("/api/orders/:id/invoice", requireUser, async (req, res) => {
-    const o = await orders.findOne({ _id: req.params.id, userId: req.user._id });
-    await sendInvoice(res, o, { download: req.query.download === "1" });
-  });
+  /**
+   * Marks a paid order as dispatched: records courier and tracking, issues the tax invoice (once)
+   * and emails it to the customer. Used by the admin dashboard.
+   */
+  async function dispatchOrder(id, { courier = "", tracking = "" }, req) {
+    const order = await withTransaction(async (session) => {
+      const o = await orders.findOne({ _id: id }, { session });
+      if (!o) throw fail(404, "Order not found.");
+      if (o.status !== "paid") throw fail(409, "Only paid orders can be dispatched.");
+      const at = new Date();
+      const dispatch = { at: o.dispatch?.at ?? at, courier: String(courier).trim().slice(0, 60), tracking: String(tracking).trim().slice(0, 60) };
+      const invoice = o.invoice ?? { number: await nextDocNumber("invoice", at, session), date: at };
+      await orders.updateOne({ _id: id }, { $set: { dispatch, invoice } }, { session });
+      return { ...o, dispatch, invoice };
+    });
+    const mail = dispatchEmail(order, { siteUrl: siteUrl(req) });
+    const result = await trySendMail({ to: order.customer.email, ...mail, attachments: [{ filename: docFile(order, "invoice"), content: await invoicePdf(order) }] });
+    await orders.updateOne({ _id: id }, { $set: { "emails.dispatch": { at: new Date(), mode: MAIL_MODE, ok: !result.failed } } });
+    return { order, email: result };
+  }
+
+  // Customers can only fetch documents for their own orders.
+  for (const kind of ["receipt", "invoice"]) {
+    app.get(`/api/orders/:id/${kind}`, requireUser, async (req, res) => {
+      const o = await orders.findOne({ _id: req.params.id, userId: req.user._id });
+      await sendDocument(res, o, kind, { download: req.query.download === "1" });
+    });
+  }
 
   app.get("/api/me/orders", requireUser, async (req, res) => {
     const mine = await orders.find({ userId: req.user._id, ...holdingFilter() }).sort({ createdAt: -1 }).toArray();
@@ -332,7 +411,7 @@ export async function createApp({ serveClient = true } = {}) {
     const owners = paid
       .flatMap((o) => (o.certificates ?? []).map((c) => ({ serial: c.serial, number: c.number, slug: c.slug, model: c.model, displayName: o.wall.displayName, issuedAt: c.issuedAt })))
       .sort((a, b) => b.number - a.number);
-    res.json({ owners, total: LAUNCH.editionSize });
+    res.json({ owners, total: EDITION_TOTAL });
   });
 
   // Production: serve the built client and let React Router handle deep links.

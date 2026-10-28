@@ -5,20 +5,31 @@ import { useAuth } from "../lib/auth.jsx";
 import { ease } from "./motion.jsx";
 
 export default function AuthForm({ title = "Sign in to your RUBIIK account", note }) {
-  const { login, register } = useAuth();
+  const { login, register, forgotPassword } = useAuth();
   const [mode, setMode] = useState("login");
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [state, setState] = useState({ busy: false, error: "", fields: [] });
+  const [sentMessage, setSentMessage] = useState("");
 
   const submit = async (e) => {
     e.preventDefault();
     setState({ busy: true, error: "", fields: [] });
     try {
       if (mode === "login") await login(form.email, form.password);
-      else await register(form.name, form.email, form.password);
+      else if (mode === "register") await register(form.name, form.email, form.password);
+      else {
+        setSentMessage(await forgotPassword(form.email));
+        setState({ busy: false, error: "", fields: [] });
+      }
     } catch (err) {
       setState({ busy: false, error: err.message, fields: err.fields ?? [] });
     }
+  };
+
+  const switchMode = (m) => {
+    setMode(m);
+    setSentMessage("");
+    setState({ busy: false, error: "", fields: [] });
   };
 
   const field = (key, label, type, autoComplete) => (
@@ -50,14 +61,11 @@ export default function AuthForm({ title = "Sign in to your RUBIIK account", not
           <button
             key={m}
             type="button"
-            onClick={() => {
-              setMode(m);
-              setState({ busy: false, error: "", fields: [] });
-            }}
-            className={`relative mr-8 whitespace-nowrap px-1 pb-3 text-[11px] uppercase tracking-wide2 transition-colors ${mode === m ? "text-ivory" : "text-ivory-mute hover:text-ivory"}`}
+            onClick={() => switchMode(m)}
+            className={`relative mr-8 whitespace-nowrap px-1 pb-3 text-[11px] uppercase tracking-wide2 transition-colors ${(mode === "forgot" ? "login" : mode) === m ? "text-ivory" : "text-ivory-mute hover:text-ivory"}`}
           >
             {label}
-            {mode === m && <motion.span layoutId="auth-tab" className="bg-gold absolute inset-x-0 -bottom-px h-px" />}
+            {(mode === "forgot" ? "login" : mode) === m && <motion.span layoutId="auth-tab" className="bg-gold absolute inset-x-0 -bottom-px h-px" />}
           </button>
         ))}
       </div>
@@ -70,12 +78,27 @@ export default function AuthForm({ title = "Sign in to your RUBIIK account", not
             </motion.div>
           )}
         </AnimatePresence>
+        {mode === "forgot" && (
+          <p className="text-sm text-ivory-dim">Enter your account email and we'll send you a link to choose a new password.</p>
+        )}
         {field("email", "Email", "email", "email")}
-        {field("password", mode === "register" ? "Password (at least 8 characters)" : "Password", "password", mode === "register" ? "new-password" : "current-password")}
+        {mode !== "forgot" &&
+          field("password", mode === "register" ? "Password (at least 8 characters)" : "Password", "password", mode === "register" ? "new-password" : "current-password")}
         {state.error && <p className="text-sm text-red-300">{state.error}</p>}
+        {mode === "forgot" && sentMessage && <p className="border border-gold/30 bg-gold/5 px-4 py-3 text-sm text-ivory-dim">{sentMessage}</p>}
         <button className="btn-gold w-full" disabled={state.busy}>
-          {state.busy ? "One moment…" : mode === "login" ? "Sign in" : "Create account"}
+          {state.busy ? "One moment…" : mode === "login" ? "Sign in" : mode === "register" ? "Create account" : "Email me a reset link"}
         </button>
+        {mode === "login" && (
+          <button type="button" onClick={() => switchMode("forgot")} className="block text-sm text-ivory-mute underline decoration-gold/40 underline-offset-4 hover:text-gold">
+            Forgot password?
+          </button>
+        )}
+        {mode === "forgot" && (
+          <button type="button" onClick={() => switchMode("login")} className="block text-sm text-ivory-mute underline decoration-gold/40 underline-offset-4 hover:text-gold">
+            Back to sign in
+          </button>
+        )}
       </form>
     </div>
   );

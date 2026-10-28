@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { PRODUCTS, LAUNCH, formatINR, unitPrice, GST_LABEL } from "../data/catalog.js";
+import { PRODUCTS, LAUNCH, formatINR, formatDate, unitPrice, GST_LABEL } from "../data/catalog.js";
 import { useShop } from "../lib/shop.jsx";
 import { useCountdown, pad } from "../lib/hooks.js";
 import { SplitReveal, FadeUp, Tilt, Magnetic, ease } from "../components/motion.jsx";
@@ -19,7 +19,7 @@ export default function PreBook() {
   const steps = [
     { date: "Today", title: "Discover", text: "Explore RUBIIK ONE and join the list.", active: phase === "teaser" },
     { date: phase === "teaser" ? fmt(LAUNCH.prebookOpens) : "Now open", title: "Pre-booking", text: "Reserve your numbered piece with 20% off.", active: phase === "prebook" },
-    { date: fmt(LAUNCH.launch), title: "Launch", text: "RUBIIK ONE is revealed and deliveries begin.", active: phase === "launched" },
+    { date: fmt(LAUNCH.launch), title: "Launch", text: `RUBIIK ONE is revealed. Deliveries begin ${formatDate(LAUNCH.deliveryFrom)}.`, active: phase === "launched" },
   ];
 
   return (
@@ -47,7 +47,7 @@ export default function PreBook() {
             )}
           </FadeUp>
           <FadeUp delay={0.15} className="mt-4 font-serif text-2xl italic text-gold sm:text-3xl">
-            Only 200 pieces. Never repeated.
+            Only {LAUNCH.editionPerModel} of each. Never repeated.
           </FadeUp>
         </div>
 
@@ -79,7 +79,7 @@ export default function PreBook() {
         {/* Products */}
         <div className="mt-24 grid gap-8 lg:grid-cols-2">
           {PRODUCTS.map((p, i) => (
-            <ProductCard key={p.slug} p={p} i={i} phase={phase} stock={status.stock} />
+            <ProductCard key={p.slug} p={p} i={i} phase={phase} stock={status.stock.byModel?.[p.slug]} />
           ))}
         </div>
 
@@ -166,7 +166,7 @@ function ProductCard({ p, i, phase, stock }) {
   const price = unitPrice(p, phase);
   // Before pre-booking opens, cards still preview the pre-booking price.
   const prebookPrice = unitPrice(p, "prebook");
-  const soldOut = stock && stock.remaining <= 0;
+  const soldOut = stock?.available === false;
   return (
     <FadeUp delay={i * 0.15}>
       <Tilt className="frame-royal group relative overflow-hidden bg-gradient-to-br from-night-600/60 to-night-900 p-8 sm:p-12" max={5}>

@@ -4,6 +4,69 @@ import { formatINR } from "../../data/catalog.js";
 import Certificate from "../../components/Certificate.jsx";
 import { PageHeader, StatusBadge, Loading, useAdminData, fmtDateTime } from "./ui.jsx";
 
+const MAIL_RESULT = (m) => (m.ok ? (m.mode === "smtp" ? "sent" : "logged") : "failed");
+const emailSummary = (emails = {}) =>
+  [emails.confirmation && `Confirmation ${MAIL_RESULT(emails.confirmation)}`, emails.dispatch && `Dispatch ${MAIL_RESULT(emails.dispatch)}`].filter(Boolean).join(" · ") || "—";
+
+function DocLinks({ label, href }) {
+  return (
+    <div className="flex flex-wrap items-center gap-4">
+      <span className="text-ivory-mute">{label}</span>
+      <a href={href} target="_blank" rel="noreferrer" className="text-ivory-dim hover:text-gold">
+        View
+      </a>
+      <a href={`${href}?download=1`} className="text-gold hover:text-gold-light">
+        Download PDF
+      </a>
+    </div>
+  );
+}
+
+const DISPATCH_NOTE = {
+  sent: "and emailed to the customer",
+  logged: "(the email went to the server log, because SMTP isn't set up yet)",
+  failed: "but the email failed to send",
+};
+
+/** Mark a paid order as dispatched: issues the tax invoice and emails it with the tracking details. */
+function Dispatch({ order: o, onChanged }) {
+  const [form, setForm] = useState({ courier: o.dispatch?.courier ?? "", tracking: o.dispatch?.tracking ?? "" });
+  const [state, setState] = useState({ busy: false, error: "", done: "" });
+  const submit = async (e) => {
+    e.preventDefault();
+    setState({ busy: true, error: "", done: "" });
+    try {
+      const res = await fetch(`/api/admin/orders/${o.id}/dispatch`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Couldn't mark this order as dispatched.");
+      setState({ busy: false, error: "", done: `Tax invoice ${data.invoiceNumber} issued ${DISPATCH_NOTE[data.email]}.` });
+      onChanged({ invoiceNumber: data.invoiceNumber, dispatch: { at: o.dispatch?.at ?? new Date().toISOString(), ...form } });
+    } catch (err) {
+      setState({ busy: false, error: err.message, done: "" });
+    }
+  };
+  return (
+    <form onSubmit={submit} className="mt-8 border border-ivory/10 bg-night-900/50 p-5">
+      <p className="text-[11px] uppercase tracking-[0.25em] text-gold">{o.dispatch ? `Dispatched ${fmtDateTime(o.dispatch.at)}` : "Dispatch"}</p>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <label className="block">
+          <span className="text-[10px] uppercase tracking-[0.18em] text-ivory-mute">Courier</span>
+          <input id={`courier-${o.id}`} className="field" value={form.courier} onChange={(e) => setForm((f) => ({ ...f, courier: e.target.value }))} placeholder="e.g. Blue Dart" maxLength={60} />
+        </label>
+        <label className="block">
+          <span className="text-[10px] uppercase tracking-[0.18em] text-ivory-mute">Tracking number</span>
+          <input id={`tracking-${o.id}`} className="field" value={form.tracking} onChange={(e) => setForm((f) => ({ ...f, tracking: e.target.value }))} maxLength={60} />
+        </label>
+      </div>
+      <button className="btn-gold mt-5 !px-5 !py-3" disabled={state.busy}>
+        {state.busy ? "Saving…" : o.dispatch ? "Update and re-send email" : "Mark dispatched & email invoice"}
+      </button>
+      {state.done && <p className="mt-3 text-sm text-emerald-300">{state.done}</p>}
+      {state.error && <p className="mt-3 text-sm text-red-300">{state.error}</p>}
+    </form>
+  );
+}
+
 const FILTERS = [
   ["all", "All"],
   ["paid", "Paid"],
@@ -78,12 +141,23 @@ export default function Orders() {
         </div>
       </Loading>
 
-      <AnimatePresence>{open && <OrderDrawer order={open} onClose={() => setOpen(null)} />}</AnimatePresence>
+      <AnimatePresence>
+        {open && (
+          <OrderDrawer
+            order={open}
+            onClose={() => setOpen(null)}
+            onChanged={(patch) => {
+              setOpen((o) => ({ ...o, ...patch }));
+              state.reload();
+            }}
+          />
+        )}
+      </AnimatePresence>
     </>
   );
 }
 
-function OrderDrawer({ order: o, onClose }) {
+function OrderDrawer({ order: o, onClose, onChanged }) {
   return (
     <>
       <motion.div className="fixed inset-0 z-[60] bg-black/60" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
@@ -112,11 +186,12 @@ function OrderDrawer({ order: o, onClose }) {
           {[
             ["Email", o.customer.email],
             ["Phone", o.customer.phone],
-            ["Address", `${o.customer.address}, ${o.customer.city} ${o.customer.pincode}`],
+            ["Address", `${o.customer.address}, ${o.customer.city}${o.customer.state ? `, ${o.customer.state}` : ""} ${o.customer.pincode}`],
             ["Created", fmtDateTime(o.createdAt)],
             ["Paid", o.payment?.paidAt ? fmtDateTime(o.payment.paidAt) : "—"],
             ["Payment", o.payment ? `${o.payment.provider}${o.payment.reference ? ` · ${o.payment.reference}` : ""}` : "—"],
             ["Owners wall", o.wall?.show ? `Shown as “${o.wall.displayName}”` : "Not shown"],
+            ["Emails", emailSummary(o.emails)],
           ].map(([k, v]) => (
             <div key={k} className="contents">
               <dt className="text-[10px] uppercase tracking-[0.18em] text-ivory-mute">{k}</dt>
@@ -155,16 +230,16 @@ function OrderDrawer({ order: o, onClose }) {
         </div>
 
         {o.status === "paid" && (
-          <div className="mt-6 flex flex-wrap items-center gap-4 text-[11px] uppercase tracking-[0.2em]">
-            <span className="text-ivory-mute">Invoice {o.invoiceNumber ?? "(issued on first download)"}</span>
-            <a href={`/api/admin/orders/${o.id}/invoice`} target="_blank" rel="noreferrer" className="text-ivory-dim hover:text-gold">
-              View
-            </a>
-            <a href={`/api/admin/orders/${o.id}/invoice?download=1`} className="text-gold hover:text-gold-light">
-              Download PDF
-            </a>
+          <div className="mt-6 space-y-3 text-[11px] uppercase tracking-[0.2em]">
+            <DocLinks label={`Receipt voucher ${o.receiptNumber ?? "(issued on first download)"}`} href={`/api/admin/orders/${o.id}/receipt`} />
+            {o.invoiceNumber ? (
+              <DocLinks label={`Tax invoice ${o.invoiceNumber}`} href={`/api/admin/orders/${o.id}/invoice`} />
+            ) : (
+              <p className="text-ivory-mute">Tax invoice · issued on dispatch</p>
+            )}
           </div>
         )}
+        {o.status === "paid" && <Dispatch order={o} onChanged={onChanged} />}
 
         {o.certificates.length > 0 && (
           <div className="mt-8 space-y-4">

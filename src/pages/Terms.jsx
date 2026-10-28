@@ -1,5 +1,5 @@
 // Terms of Service: the rules of the RUBIIK ONE edition, pre-booking, pricing, payment and delivery.
-import { PRODUCTS, LAUNCH, formatINR, unitPrice } from "../data/catalog.js";
+import { PRODUCTS, LAUNCH, formatINR, formatDate, unitPrice } from "../data/catalog.js";
 import { MAX_PER_MODEL } from "../lib/shop.jsx";
 import LegalPage, { Section, List, Strong, Mail } from "../components/LegalPage.jsx";
 import { CONTACT } from "../data/legal.js";
@@ -17,7 +17,7 @@ export default function Terms() {
     >
       <Section n="1" title="The edition">
         <p>
-          RUBIIK ONE is a limited edition of <Strong>{LAUNCH.editionSize} numbered pieces</Strong> shared across both models. Once all pieces are sold, the edition closes and
+          RUBIIK ONE is made in two limited editions of <Strong>{LAUNCH.editionPerModel} numbered pieces each</Strong>, one per model ({LAUNCH.editionPerModel * PRODUCTS.length} in all). Each watch is numbered within its model. Once a model's pieces are sold, its edition closes and
           will not be produced again. Pieces are offered while they last.
         </p>
       </Section>
@@ -64,7 +64,7 @@ export default function Terms() {
 
       <Section n="6" title="Delivery">
         <p>
-          Watches are delivered after the launch on {launchDate}, with complimentary insured delivery to addresses in India. Please make sure your delivery details are correct;
+          Watches are shipped from {formatDate(LAUNCH.deliveryFrom, { year: "numeric" })}, after the launch on {launchDate}, with complimentary insured delivery to addresses in India. Please make sure your delivery details are correct;
           someone may need to be present to sign for the parcel. We will keep you informed if anything delays your delivery.
         </p>
       </Section>

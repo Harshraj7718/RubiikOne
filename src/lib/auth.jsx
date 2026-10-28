@@ -24,12 +24,18 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (email, password) => setUser((await post("/api/auth/login", { email, password })).user), []);
   const register = useCallback(async (name, email, password) => setUser((await post("/api/auth/register", { name, email, password })).user), []);
+  const forgotPassword = useCallback(async (email) => (await post("/api/auth/forgot", { email })).message, []);
+  // A successful reset also signs the customer in.
+  const resetPassword = useCallback(async (token, password) => setUser((await post("/api/auth/reset", { token, password })).user), []);
   const logout = useCallback(async () => {
     await post("/api/auth/logout");
     setUser(null);
   }, []);
 
-  const value = useMemo(() => ({ user, ready, login, register, logout }), [user, ready, login, register, logout]);
+  const value = useMemo(
+    () => ({ user, ready, login, register, logout, forgotPassword, resetPassword }),
+    [user, ready, login, register, logout, forgotPassword, resetPassword],
+  );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

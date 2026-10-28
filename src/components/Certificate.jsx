@@ -17,9 +17,10 @@ export default function Certificate({ cert, name, size = "lg", className = "" })
   const movement = product.specs.find(([k]) => k === "Movement")?.[1].split(",")[0];
   // Font size in card widths, never below a readable minimum on small cards.
   const fs = (cqw, minPx) => ({ fontSize: `max(${cqw}cqw, ${minPx}px)` });
-  // Up to three edition numbers either side of this one, kept within 1…editionSize.
-  const first = Math.max(1, Math.min(cert.number - 3, LAUNCH.editionSize - 6));
-  const rail = Array.from({ length: 7 }, (_, i) => first + i).filter((n) => n <= LAUNCH.editionSize);
+  // Each model has its own edition (No. 001–200). Up to three numbers either side of this one.
+  const perModel = LAUNCH.editionPerModel;
+  const first = Math.max(1, Math.min(cert.number - 3, perModel - 6));
+  const rail = Array.from({ length: 7 }, (_, i) => first + i).filter((n) => n <= perModel);
 
   return (
     <Tilt className={`group relative ${lg ? "py-[4%]" : "w-[320px] py-4 sm:w-[380px]"} ${className}`} max={lg ? 6 : 4}>
@@ -56,7 +57,7 @@ export default function Certificate({ cert, name, size = "lg", className = "" })
               <p className="cert-wide flex flex-wrap gap-x-[2.6cqw] uppercase text-white/75" style={{ ...fs(1.15, 8), letterSpacing: "0.08em" }}>
                 <span>Certificate of edition</span>
                 <span>RUBIIK ONE</span>
-                <span>Limited {LAUNCH.editionSize}</span>
+                <span>Limited {perModel}</span>
                 <span>Est. MMXXVI</span>
               </p>
             )}
@@ -79,7 +80,7 @@ export default function Certificate({ cert, name, size = "lg", className = "" })
               No. {pad3(cert.number)}
               <span className="text-white/55" style={fs(lg ? 1.8 : 2.4, 10)}>
                 {" "}
-                / {LAUNCH.editionSize}
+                / {perModel}
               </span>
             </p>
 
@@ -88,7 +89,7 @@ export default function Certificate({ cert, name, size = "lg", className = "" })
             </p>
             {lg && (
               <p className="cert-wide mt-[0.6cqw] max-w-[92%] text-white/65" style={fs(1.25, 9)}>
-                One of {LAUNCH.editionSize} numbered pieces, never to be repeated. Issued {fmtDate(cert.issuedAt)}.
+                One of {perModel} numbered {product.edition} pieces, never to be repeated. Issued {fmtDate(cert.issuedAt)}.
               </p>
             )}
 

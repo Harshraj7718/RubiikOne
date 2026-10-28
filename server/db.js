@@ -37,6 +37,9 @@ export async function connectDb() {
   const waitlist = db.collection("waitlist"); // { email, at }
   const meta = db.collection("meta"); // { _id: "edition" | "serialSecret", ... }
   const coupons = db.collection("coupons"); // _id = code, e.g. RBK7KQ2M9; created by admins
+  const resets = db.collection("password_resets"); // { hash, userId, expiresAt }: one-time reset links
+  const admins = db.collection("admins"); // _id = username; team members added by an owner
+  const audit = db.collection("audit"); // { at, admin, role, action, target, details, ip }: admin activity log
 
   await Promise.all([
     users.createIndex({ email: 1 }, { unique: true }),
@@ -47,6 +50,11 @@ export async function connectDb() {
     orders.createIndex({ status: 1, holdUntil: 1 }),
     orders.createIndex({ "coupon.code": 1 }),
     waitlist.createIndex({ email: 1 }, { unique: true }),
+    resets.createIndex({ hash: 1 }, { unique: true }),
+    audit.createIndex({ at: -1 }),
+    audit.createIndex({ admin: 1, at: -1 }),
+    // Reset links expire after 30 minutes; MongoDB removes them on its own.
+    resets.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
   ]);
 
   /** Runs `fn(session)` in a transaction, retrying on transient conflicts. */
@@ -63,5 +71,5 @@ export async function connectDb() {
     }
   }
 
-  return { client, db, users, sessions, orders, waitlist, meta, coupons, withTransaction };
+  return { client, db, users, sessions, orders, waitlist, meta, coupons, resets, admins, audit, withTransaction };
 }

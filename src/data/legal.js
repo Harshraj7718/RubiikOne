@@ -7,8 +7,8 @@ export const CONTACT = {
   email: "support@rubiikone.com",
   address: ["Plot No. A4, Logix Technova", "B-320, Sector 132, Noida", "Gautam Buddha Nagar, Uttar Pradesh 201304", "India"],
   instagram: "rubiikone",
-  // TEST VALUE: replace with RUBIIK's real support hours before going live.
-  hours: "Monday – Saturday, 10:00 – 19:00 IST",
+  // Support hours shown in the footer, e.g. "Monday – Saturday, 10:00 – 19:00 IST". Left empty, the line is hidden.
+  hours: "",
 };
 
 export const LEGAL = {

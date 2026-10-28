@@ -38,7 +38,7 @@ export default function CartDrawer() {
               {cart.length === 0 && (
                 <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
                   <p className="font-serif text-3xl italic">Your time awaits.</p>
-                  <p className="text-sm text-ivory-dim">Only 200 RUBIIK ONE will ever be made, across both models.</p>
+                  <p className="text-sm text-ivory-dim">Only 200 of each RUBIIK ONE model will ever be made.</p>
                 </div>
               )}
               {cart.map((l, i) => (
