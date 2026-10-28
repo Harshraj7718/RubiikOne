@@ -8,7 +8,7 @@ export const LAUNCH = {
   // The launch falls on Dhanteras; the hero wears its festive touch until the end of 7 November.
   festiveUntil: "2026-11-08T00:00:00+05:30",
   prebookDiscount: 0.2,
-  // Prices below are before GST; 18% GST is added at checkout.
+  // Prices below are MRPs, inclusive of 18% GST: customers pay exactly the price shown.
   gstRate: 0.18,
   currency: "INR",
   // One numbered edition shared by both models: 200 pieces in total.
@@ -25,7 +25,7 @@ export const PRODUCTS = [
     tagline: "Style goes deeper.",
     blurb:
       "An open-worked automatic calibre framed by a sculpted, sandblasted gunmetal case. The skeletal dial unveils a deeper perspective — complexity made beautiful.",
-    price: 46000, // before 18% GST
+    price: 49999, // MRP, incl. 18% GST
     accent: "#8d9094",
     images: {
       cutout: "/images/skeleton-watch.webp",
@@ -59,7 +59,7 @@ export const PRODUCTS = [
     tagline: "A distinctive perspective on time.",
     blurb:
       "A sunray olive dial with rose-gold indices, set in a brushed olive octagonal case. Precise Japanese quartz in a silhouette that speaks without saying too much.",
-    price: 35000, // before 18% GST
+    price: 39999, // MRP, incl. 18% GST
     accent: "#8a9a3a",
     images: {
       cutout: "/images/olive-watch.webp",
@@ -101,25 +101,39 @@ export function phaseAt(now = Date.now(), forceOpen = false) {
 /** True while the hero shows the Dhanteras launch theme. */
 export const isFestive = (now = Date.now()) => now < Date.parse(LAUNCH.festiveUntil);
 
-/** Unit price before GST for a phase; pre-booking gets the launch discount. */
+/** Unit price (incl. GST) for a phase; pre-booking gets the launch discount. */
 export function unitPrice(product, phase) {
   return phase === "prebook" ? Math.round(product.price * (1 - LAUNCH.prebookDiscount)) : product.price;
 }
 
-/** GST on an amount (rounded to the rupee). */
-export const gstOn = (amount) => Math.round(amount * LAUNCH.gstRate);
-/** Shown next to every pre-tax price, e.g. "₹46,000 + 18% GST". */
-export const GST_LABEL = `+ ${Math.round(LAUNCH.gstRate * 100)}% GST`;
+/** The GST contained in a GST-inclusive amount (rounded to the rupee), for invoices and summaries. */
+export const gstIncluded = (amount) => amount - Math.round(amount / (1 + LAUNCH.gstRate));
+/** Shown next to every price, e.g. "₹49,999 incl. GST". */
+export const GST_LABEL = "incl. GST";
 
 /**
- * Totals for lines of { unit, list, qty } (unit = price charged before GST, list = full price before GST).
- * GST applies to the discounted value, as the tax is charged on what the customer actually pays.
+ * What an admin-issued coupon ({ type: "percent" | "fixed", value }) takes off an amount (incl. GST).
+ * It never brings the amount below ₹1, the smallest payment the gateway accepts.
  */
-export function totalsFor(lines) {
+export function couponDiscount(coupon, amount) {
+  if (!coupon || amount <= 1) return 0;
+  const off = coupon.type === "percent" ? Math.round((amount * coupon.value) / 100) : coupon.value;
+  return Math.max(0, Math.min(off, amount - 1));
+}
+/** e.g. "10% off" or "₹2,000 off". */
+export const couponLabel = (coupon) => (coupon.type === "percent" ? `${coupon.value}% off` : `${formatINR(coupon.value)} off`);
+
+/**
+ * Totals for lines of { unit, list, qty } (unit = price charged, list = MRP; all amounts include GST).
+ * `subtotal` is after the pre-booking discount; an optional coupon then comes off it. The customer
+ * pays `total`; `gst` is the tax already inside it.
+ */
+export function totalsFor(lines, coupon = null) {
   const listTotal = lines.reduce((n, l) => n + l.list * l.qty, 0);
   const subtotal = lines.reduce((n, l) => n + l.unit * l.qty, 0);
-  const gst = gstOn(subtotal);
-  return { listTotal, discount: listTotal - subtotal, subtotal, gst, total: subtotal + gst };
+  const couponOff = couponDiscount(coupon, subtotal);
+  const total = subtotal - couponOff;
+  return { listTotal, discount: listTotal - subtotal, subtotal, couponDiscount: couponOff, total, gst: gstIncluded(total) };
 }
 
 /** A launch date as Indian readers write it, e.g. "6 November" or, with { year: "numeric" }, "6 November 2026". */

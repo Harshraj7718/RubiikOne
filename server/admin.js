@@ -4,9 +4,9 @@
 import path from "node:path";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import express from "express";
-import { LAUNCH, PRODUCTS } from "../src/data/catalog.js";
+import { LAUNCH, PRODUCTS, couponLabel } from "../src/data/catalog.js";
 import { readCookie } from "./auth.js";
 
 const ADMIN_COOKIE = "rbk_admin";
@@ -17,7 +17,7 @@ const sameSecret = (given, expected) => timingSafeEqual(sha256(given), sha256(ex
 const adminConfigured = () => Boolean(process.env.ADMIN_USERNAME && process.env.ADMIN_PASSWORD);
 
 /** At most `max` attempts per key in each window. */
-function createLimiter({ max, windowMs }) {
+export function createLimiter({ max, windowMs }) {
   const hits = new Map();
   return (key) => {
     const now = Date.now();
@@ -36,7 +36,7 @@ function setAdminCookie(res, token, maxAgeSeconds) {
   res.setHeader("Set-Cookie", `${ADMIN_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAgeSeconds}${secure}`);
 }
 
-// Amount charged incl. GST; orders placed before GST was added only have a subtotal.
+// Amount charged incl. GST; the earliest orders only stored a subtotal.
 const orderTotal = (o) => o.total ?? o.subtotal;
 const IMAGE = /\.(webp|png|jpe?g|svg|gif|avif)$/i;
 // Cells starting with these could run as formulas when a CSV is opened in a spreadsheet.
@@ -53,7 +53,7 @@ const shortName = (name = "") => {
   return last ? `${first} ${last[0].toUpperCase()}.` : first ?? "";
 };
 
-export function mountAdmin(app, { users, orders, waitlist, sessions }, { root }) {
+export function mountAdmin(app, { users, orders, waitlist, sessions, coupons }, { root }) {
   const limitLogin = createLimiter({ max: 5, windowMs: 15 * 60 * 1000 });
 
   /** The signed-in admin for this request, or null. Admin sessions live in `sessions` with admin: true. */
@@ -114,6 +114,7 @@ export function mountAdmin(app, { users, orders, waitlist, sessions }, { root })
     compareAt: o.compareAt,
     gst: o.gst ?? 0,
     total: orderTotal(o),
+    coupon: o.coupon ? { code: o.coupon.code, discount: o.coupon.discount } : null,
     wall: o.wall,
     certificates: o.certificates ?? [],
     payment: o.payment ? { provider: o.payment.provider, reference: o.payment.reference ?? null, paidAt: o.payment.paidAt ?? null } : null,
@@ -173,7 +174,7 @@ export function mountAdmin(app, { users, orders, waitlist, sessions }, { root })
 
   app.get("/api/admin/orders.csv", requireAdmin, async (req, res) => {
     const list = await findOrders(req.query);
-    const rows = [["Order", "Created", "Status", "Name", "Email", "Phone", "Address", "City", "PIN", "Items", "Total incl. GST (INR)", "Serials", "On wall", "Payment ref"]];
+    const rows = [["Order", "Created", "Status", "Name", "Email", "Phone", "Address", "City", "PIN", "Items", "Total incl. GST (INR)", "Coupon", "Serials", "On wall", "Payment ref"]];
     for (const o of list) {
       rows.push([
         o.id,
@@ -187,6 +188,7 @@ export function mountAdmin(app, { users, orders, waitlist, sessions }, { root })
         o.customer.pincode,
         o.items.map((i) => `${i.qty}x ${i.name}`).join("; "),
         o.total,
+        o.coupon ? `${o.coupon.code} (-${o.coupon.discount})` : "",
         o.certificates.map((c) => c.serial).join("; "),
         o.wall?.show ? o.wall.displayName : "",
         o.payment?.reference ?? "",
@@ -229,6 +231,97 @@ export function mountAdmin(app, { users, orders, waitlist, sessions }, { root })
   });
 
   // Owners wall moderation: show or hide a paid order's card.
+  // ---------- Coupons ----------
+  // Codes are stored upper-case as the document _id. Uses are counted from orders (paid, or held
+  // and still within their payment window), so cancelled or abandoned checkouts free their use.
+  const COUPON_CODE = /^[A-Z0-9-]{4,20}$/;
+  const CODE_LETTERS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no 0/O or 1/I, which are easy to misread
+  const newCode = () => `RBK${Array.from({ length: 6 }, () => CODE_LETTERS[randomInt(CODE_LETTERS.length)]).join("")}`;
+
+  async function couponRows() {
+    const list = await coupons.find({}).sort({ createdAt: -1 }).toArray();
+    const now = Date.now();
+    const usage = await orders.find({ coupon: { $ne: null } }, { projection: { coupon: 1, status: 1, holdUntil: 1 } }).toArray();
+    return list.map((c) => {
+      const mine = usage.filter((o) => o.coupon?.code === c._id);
+      const paid = mine.filter((o) => o.status === "paid");
+      return {
+        code: c._id,
+        type: c.type,
+        value: c.value,
+        label: couponLabel(c),
+        maxUses: c.maxUses ?? null,
+        expiresAt: c.expiresAt ?? null,
+        active: c.active,
+        expired: Boolean(c.expiresAt && new Date(c.expiresAt).getTime() <= now),
+        note: c.note ?? "",
+        createdAt: c.createdAt,
+        used: paid.length,
+        held: mine.filter((o) => effectiveStatus(o, now) === "pending_payment").length,
+        discountGiven: paid.reduce((n, o) => n + (o.coupon.discount ?? 0), 0),
+        everUsed: mine.length > 0,
+      };
+    });
+  }
+
+  app.get("/api/admin/coupons", requireAdmin, async (_req, res) => {
+    res.json({ coupons: await couponRows() });
+  });
+
+  app.post("/api/admin/coupons", requireAdmin, async (req, res) => {
+    const body = req.body ?? {};
+    const type = body.type === "fixed" ? "fixed" : "percent";
+    const value = Math.floor(Number(body.value));
+    const maxUses = body.maxUses === "" || body.maxUses == null ? null : Math.floor(Number(body.maxUses));
+    const expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
+    const note = String(body.note ?? "").trim().slice(0, 80);
+    let code = String(body.code ?? "").trim().toUpperCase();
+
+    if (code && !COUPON_CODE.test(code)) return res.status(400).json({ error: "Codes use 4–20 letters, numbers or dashes." });
+    if (type === "percent" && !(value >= 1 && value <= 90)) return res.status(400).json({ error: "A percentage must be between 1 and 90." });
+    if (type === "fixed" && !(value >= 1 && value <= 100000)) return res.status(400).json({ error: "Enter an amount between ₹1 and ₹1,00,000." });
+    if (maxUses !== null && !(maxUses >= 1)) return res.status(400).json({ error: "Usage limit must be at least 1, or left empty." });
+    if (expiresAt && (Number.isNaN(expiresAt.getTime()) || expiresAt <= new Date())) return res.status(400).json({ error: "The expiry must be a future date." });
+
+    const doc = { type, value, maxUses, expiresAt, note, active: true, createdAt: new Date() };
+    try {
+      if (code) await coupons.insertOne({ _id: code, ...doc });
+      else {
+        // A generated code is retried in the (very unlikely) event it already exists.
+        for (let tries = 0; ; tries++) {
+          code = newCode();
+          try {
+            await coupons.insertOne({ _id: code, ...doc });
+            break;
+          } catch (err) {
+            if (err.code !== 11000 || tries >= 4) throw err;
+          }
+        }
+      }
+    } catch (err) {
+      if (err.code === 11000) return res.status(409).json({ error: `The code ${code} already exists.` });
+      throw err;
+    }
+    res.status(201).json({ coupon: (await couponRows()).find((c) => c.code === code) });
+  });
+
+  app.patch("/api/admin/coupons/:code", requireAdmin, async (req, res) => {
+    const { matchedCount } = await coupons.updateOne({ _id: String(req.params.code).toUpperCase() }, { $set: { active: req.body?.active === true } });
+    if (!matchedCount) return res.status(404).json({ error: "Coupon not found." });
+    res.json({ ok: true });
+  });
+
+  // A coupon that any order has used is kept for the record; pause it instead.
+  app.delete("/api/admin/coupons/:code", requireAdmin, async (req, res) => {
+    const code = String(req.params.code).toUpperCase();
+    if (await orders.countDocuments({ "coupon.code": code }, { limit: 1 })) {
+      return res.status(409).json({ error: "This coupon has been used on an order, so it can only be paused." });
+    }
+    const { deletedCount } = await coupons.deleteOne({ _id: code });
+    if (!deletedCount) return res.status(404).json({ error: "Coupon not found." });
+    res.json({ ok: true });
+  });
+
   app.patch("/api/admin/orders/:id/wall", requireAdmin, async (req, res) => {
     const show = req.body?.show === true;
     const order = await orders.findOne({ _id: req.params.id });

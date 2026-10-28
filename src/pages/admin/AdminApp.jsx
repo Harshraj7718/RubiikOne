@@ -7,6 +7,7 @@ import Overview from "./Overview.jsx";
 import Orders from "./Orders.jsx";
 import Customers from "./Customers.jsx";
 import Waitlist from "./Waitlist.jsx";
+import Coupons from "./Coupons.jsx";
 import Wall from "./Wall.jsx";
 import Media from "./Media.jsx";
 import Design from "./Design.jsx";
@@ -15,6 +16,7 @@ const LINKS = [
   ["", "Overview"],
   ["orders", "Orders"],
   ["customers", "Customers"],
+  ["coupons", "Coupons"],
   ["waitlist", "Waitlist"],
   ["wall", "Owners wall"],
   ["media", "Media library"],
@@ -89,6 +91,7 @@ export default function AdminApp() {
           <Route index element={<Overview />} />
           <Route path="orders" element={<Orders />} />
           <Route path="customers" element={<Customers />} />
+          <Route path="coupons" element={<Coupons />} />
           <Route path="waitlist" element={<Waitlist />} />
           <Route path="wall" element={<Wall />} />
           <Route path="media" element={<Media />} />

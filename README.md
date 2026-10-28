@@ -60,15 +60,15 @@ Set `NODE_ENV=production` there so session cookies are marked `Secure`.
 | Setting | Value |
 | --- | --- |
 | Pieces | 200 in total, shared by both models (`LAUNCH.editionSize`) |
-| Price (before GST) | Automatic Skeleton ₹46,000 · Quartz Olive ₹35,000 |
-| GST | 18%, added on the amount paid (`LAUNCH.gstRate`) |
-| Pre-booking | open now (since 24 Oct 2026) — 20% off: ₹36,800 and ₹28,000 + GST |
+| Price (MRP, incl. GST) | Automatic Skeleton ₹49,999 · Quartz Olive ₹39,999 |
+| GST | 18%, included in the price (`LAUNCH.gstRate`); invoices show the GST inside each amount |
+| Pre-booking | open now (since 24 Oct 2026) — 20% off: ₹39,999 and ₹31,999 (incl. GST) |
 | Launch | 6 Nov 2026, 00:00 IST |
 | Limit | 2 per model per order |
 
 Phases are decided by the server: **teaser** (before pre-booking opens: countdown + "Notify me" waitlist),
 **prebook** (until 5 Nov: discounted pre-orders), **launched** (from 6 Nov, full price).
-Orders store `subtotal` (after discount, before GST), `gst` and `total`; the customer is charged `total`.
+Orders store `subtotal` and `total` (equal, GST-inclusive) and `gst` (the tax inside); the customer is charged `total`.
 Prices and stock are always recomputed on the server.
 
 ## Pre-order flow
@@ -101,6 +101,7 @@ on the server. To change the password, edit the variable and restart (or redeplo
 | Overview | Pieces sold / held / available, revenue, customers, waitlist, sales per model, last 14 days, recent orders |
 | Orders | Search and filter, full order details with certificates, CSV export |
 | Customers | Accounts with orders, pieces, spend and serials |
+| Coupons | Create discount codes (percentage or fixed ₹, optional usage limit and expiry), pause or delete them, see uses and discount given |
 | Waitlist | "Notify me" emails, CSV export |
 | Owners wall | Show or hide each paid order's card, edit its display name |
 | Media library | Every image the site uses (with the files that use it) and the original brand files (admin-only) |

@@ -7,10 +7,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 import { randomUUID, randomBytes, createHmac } from "node:crypto";
-import { PRODUCTS, LAUNCH, findProduct, phaseAt, unitPrice, totalsFor, formatDate } from "../src/data/catalog.js";
+import { PRODUCTS, LAUNCH, findProduct, phaseAt, unitPrice, totalsFor, formatDate, couponLabel } from "../src/data/catalog.js";
 import { connectDb } from "./db.js";
 import { mountAuth } from "./auth.js";
-import { mountAdmin } from "./admin.js";
+import { mountAdmin, createLimiter } from "./admin.js";
 import { PAYMENT_MODE, startPayment, verifyPayment } from "./payments.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -24,12 +24,12 @@ const HOLD_MINUTES = 30;
  */
 export async function createApp({ serveClient = true } = {}) {
   const store = await connectDb();
-  const { users, orders, waitlist, meta, withTransaction } = store;
+  const { users, orders, waitlist, meta, coupons, withTransaction } = store;
 
   const app = express();
   // Express 4 doesn't catch rejected promises from async handlers; send them to the error handler
   // instead of letting a database hiccup crash the process.
-  for (const method of ["get", "post", "patch"]) {
+  for (const method of ["get", "post", "patch", "delete"]) {
     const register = app[method].bind(app);
     app[method] = (route, ...handlers) =>
       register(
@@ -98,6 +98,7 @@ export async function createApp({ serveClient = true } = {}) {
     compareAt: o.compareAt,
     gst: o.gst ?? 0,
     total: o.total ?? o.subtotal,
+    coupon: o.coupon ? { code: o.coupon.code, discount: o.coupon.discount } : null,
     customer: { name: o.customer.name, city: o.customer.city },
     wall: o.wall,
     certificates: o.certificates ?? [],
@@ -105,6 +106,38 @@ export async function createApp({ serveClient = true } = {}) {
   });
 
   const fail = (status, message) => Object.assign(new Error(message), { status });
+
+  /**
+   * Looks up an admin-issued coupon and checks it can still be used. Paid orders and live holds
+   * count as uses, exactly like pieces of the edition, so a limited coupon can't be over-used.
+   * Returns { code, type, value } or throws a 4xx error the customer can read.
+   */
+  async function usableCoupon(rawCode, { session } = {}) {
+    const code = String(rawCode ?? "").trim().toUpperCase();
+    // Marked so checkout can tell a coupon problem apart from other order errors.
+    const fail = (status, message) => Object.assign(new Error(message), { status, field: "coupon" });
+    const coupon = code && (await coupons.findOne({ _id: code }, { session }));
+    if (!coupon || !coupon.active) throw fail(404, "This coupon code isn't valid.");
+    if (coupon.expiresAt && new Date(coupon.expiresAt) <= new Date()) throw fail(410, "This coupon has expired.");
+    if (coupon.maxUses) {
+      const used = await orders.countDocuments({ "coupon.code": code, ...holdingFilter() }, { session });
+      if (used >= coupon.maxUses) throw fail(409, "This coupon has already been fully used.");
+    }
+    return { code, type: coupon.type, value: coupon.value };
+  }
+
+  // Customers check a code before paying; guessing codes is slowed down per visitor.
+  const limitCouponChecks = createLimiter({ max: 20, windowMs: 15 * 60 * 1000 });
+  app.post("/api/coupons/check", async (req, res) => {
+    if (!limitCouponChecks(req.ip)) return res.status(429).json({ error: "Too many attempts. Please wait a few minutes and try again." });
+    try {
+      const coupon = await usableCoupon(req.body?.code);
+      res.json({ coupon: { ...coupon, label: couponLabel(coupon) } });
+    } catch (err) {
+      if (!err.status) console.error(err);
+      res.status(err.status ?? 500).json({ error: err.status ? err.message : "Couldn't check this code. Please try again." });
+    }
+  });
 
   app.get("/api/status", async (_req, res) => {
     res.json({ phase: phase(), forced: FORCE_PREBOOK, paymentMode: PAYMENT_MODE, serverTime: new Date().toISOString(), launch: LAUNCH, stock: await stockView() });
@@ -125,7 +158,7 @@ export async function createApp({ serveClient = true } = {}) {
     const current = phase();
     if (current === "teaser") return res.status(409).json({ error: `Pre-booking opens on ${formatDate(LAUNCH.prebookOpens)}.` });
 
-    const { customer = {}, items = [], wall = {} } = req.body ?? {};
+    const { customer = {}, items = [], wall = {}, couponCode = "" } = req.body ?? {};
     const phone = String(customer.phone ?? "").trim();
     const address = String(customer.address ?? "").trim();
     const city = String(customer.city ?? "").trim();
@@ -155,7 +188,6 @@ export async function createApp({ serveClient = true } = {}) {
     for (const [slug, qty] of qtyBySlug) {
       const product = findProduct(slug);
       if (qty > 2) return res.status(400).json({ error: "Each watch is limited to 2 per client." });
-      // unitPrice is before GST; GST is added on the order total below.
       lines.push({ slug, name: `${product.name} ${product.edition}`, qty, unitPrice: unitPrice(product, current) });
     }
     if (!lines.length) return res.status(400).json({ error: "Your selection is empty." });
@@ -166,7 +198,12 @@ export async function createApp({ serveClient = true } = {}) {
         const stock = await stockView({ session });
         const wanted = lines.reduce((n, l) => n + l.qty, 0);
         if (stock.remaining < wanted) throw fail(409, stock.remaining ? `Only ${stock.remaining} pieces of the edition remain.` : "The edition is fully reserved.");
-        const totals = totalsFor(lines.map((l) => ({ unit: l.unitPrice, list: findProduct(l.slug).price, qty: l.qty })));
+        // The coupon is re-checked inside the transaction, so its usage limit holds under concurrent orders.
+        const coupon = String(couponCode).trim() ? await usableCoupon(couponCode, { session }) : null;
+        const totals = totalsFor(
+          lines.map((l) => ({ unit: l.unitPrice, list: findProduct(l.slug).price, qty: l.qty })),
+          coupon,
+        );
         const doc = {
           _id: `RBK-${randomUUID().slice(0, 8).toUpperCase()}`,
           userId: req.user._id,
@@ -175,8 +212,10 @@ export async function createApp({ serveClient = true } = {}) {
           phase: current,
           customer: { name: req.user.name, email: req.user.email, phone, address, city, pincode },
           items: lines,
-          // All amounts in rupees: subtotal and compareAt before GST, total = subtotal + GST (what is charged).
+          // All amounts in rupees and GST-inclusive: subtotal is after the pre-booking discount, the
+          // coupon comes off that, and total is what is charged; gst is the tax inside the total.
           subtotal: totals.subtotal,
+          coupon: coupon ? { ...coupon, discount: totals.couponDiscount } : null,
           compareAt: totals.listTotal,
           gstRate: LAUNCH.gstRate,
           gst: totals.gst,
@@ -192,7 +231,7 @@ export async function createApp({ serveClient = true } = {}) {
       res.status(201).json({ order: orderView(order), payment: { ...payment, name: req.user.name, email: req.user.email, contact: phone } });
     } catch (err) {
       if (!err.status) console.error(err);
-      res.status(err.status ?? 500).json({ error: err.status ? err.message : "Something went wrong. Please try again." });
+      res.status(err.status ?? 500).json({ error: err.status ? err.message : "Something went wrong. Please try again.", fields: err.field ? [err.field] : undefined });
     }
   });
 

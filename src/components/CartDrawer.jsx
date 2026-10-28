@@ -87,14 +87,13 @@ export default function CartDrawer() {
                     <span>− {formatINR(saving)}</span>
                   </div>
                 )}
-                <div className="mb-3 flex justify-between text-sm text-ivory-dim">
-                  <span>GST ({Math.round(LAUNCH.gstRate * 100)}%)</span>
-                  <span>{formatINR(gst)}</span>
-                </div>
-                <div className="mb-6 flex items-baseline justify-between">
+                <div className="flex items-baseline justify-between">
                   <span className="eyebrow text-ivory">Total</span>
                   <span className="font-serif text-3xl">{formatINR(total)}</span>
                 </div>
+                <p className="mb-6 mt-1 text-right text-xs text-ivory-mute">
+                  Includes {formatINR(gst)} GST ({Math.round(LAUNCH.gstRate * 100)}%)
+                </p>
                 {phase === "teaser" ? (
                   <p className="text-center text-sm text-ivory-dim">
                     Pre-booking opens on{" "}

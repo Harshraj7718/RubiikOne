@@ -36,6 +36,7 @@ export async function connectDb() {
   const orders = db.collection("orders"); // _id = order id, e.g. RBK-1A2B3C4D
   const waitlist = db.collection("waitlist"); // { email, at }
   const meta = db.collection("meta"); // { _id: "edition" | "serialSecret", ... }
+  const coupons = db.collection("coupons"); // _id = code, e.g. RBK7KQ2M9; created by admins
 
   await Promise.all([
     users.createIndex({ email: 1 }, { unique: true }),
@@ -44,6 +45,7 @@ export async function connectDb() {
     sessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
     orders.createIndex({ userId: 1, createdAt: -1 }),
     orders.createIndex({ status: 1, holdUntil: 1 }),
+    orders.createIndex({ "coupon.code": 1 }),
     waitlist.createIndex({ email: 1 }, { unique: true }),
   ]);
 
@@ -61,5 +63,5 @@ export async function connectDb() {
     }
   }
 
-  return { client, db, users, sessions, orders, waitlist, meta, withTransaction };
+  return { client, db, users, sessions, orders, waitlist, meta, coupons, withTransaction };
 }

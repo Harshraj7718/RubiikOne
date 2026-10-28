@@ -73,7 +73,7 @@ export function ShopProvider({ children }) {
       refreshStatus,
       cart: lines,
       count: lines.reduce((n, l) => n + l.qty, 0),
-      // subtotal and compareTotal are before GST; total = subtotal + gst is what the customer pays.
+      // All amounts include GST: total (= subtotal) is what the customer pays; gst is the tax inside it.
       subtotal: totals.subtotal,
       compareTotal: totals.listTotal,
       gst: totals.gst,

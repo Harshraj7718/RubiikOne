@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useShop } from "../lib/shop.jsx";
 import { useAuth, shortName } from "../lib/auth.jsx";
-import { formatINR, LAUNCH } from "../data/catalog.js";
+import { formatINR, LAUNCH, totalsFor } from "../data/catalog.js";
 import { Emblem } from "../components/Logo.jsx";
 import { ease } from "../components/motion.jsx";
 import AuthForm from "../components/AuthForm.jsx";
@@ -37,8 +37,15 @@ function loadRazorpay() {
 }
 
 export default function Checkout() {
-  const { cart, subtotal, compareTotal, gst, total, phase, clear, refreshStatus } = useShop();
-  const cartTotals = { subtotal, compareTotal, gst, total };
+  const { cart, phase, clear, refreshStatus } = useShop();
+  const [coupon, setCoupon] = useState(null); // { code, type, value, label } once a code is applied
+  // Shown for guidance only; the server recomputes every amount (and re-checks the coupon) on order.
+  const t = totalsFor(
+    cart.map((l) => ({ unit: l.unit, list: l.compareAt, qty: l.qty })),
+    coupon,
+  );
+  const cartTotals = { subtotal: t.subtotal, compareTotal: t.listTotal, couponCode: coupon?.code, couponDiscount: t.couponDiscount, gst: t.gst, total: t.total };
+  const total = t.total;
   const { user, ready, logout } = useAuth();
   const [form, setForm] = useState({ phone: "", address: "", city: "", pincode: "" });
   const [wall, setWall] = useState({ show: true, displayName: "" });
@@ -88,12 +95,14 @@ export default function Checkout() {
     e.preventDefault();
     setState({ busy: true, error: "", fields: [] });
     try {
-      const data = await postJSON("/api/prebook", { customer: form, wall, items: cart.map((l) => ({ slug: l.slug, qty: l.qty })) });
+      const data = await postJSON("/api/prebook", { customer: form, wall, couponCode: coupon?.code ?? "", items: cart.map((l) => ({ slug: l.slug, qty: l.qty })) });
       setPending(data);
       setState({ busy: false, error: "", fields: [] });
       scrollTop();
       if (data.payment.provider === "razorpay") openRazorpay(data);
     } catch (err) {
+      // A coupon that stopped working since it was applied (paused, expired, used up) is removed.
+      if (err.fields?.includes("coupon")) setCoupon(null);
       setState({ busy: false, error: err.message, fields: err.fields ?? [] });
     }
   };
@@ -191,7 +200,19 @@ export default function Checkout() {
 
       <Summary
         cart={pending ? pending.order.items.map((i) => ({ ...i, product: null })) : cart}
-        totals={pending ? { subtotal: pending.order.subtotal, compareTotal: pending.order.compareAt, gst: pending.order.gst, total: pending.order.total } : cartTotals}
+        totals={
+          pending
+            ? {
+                subtotal: pending.order.subtotal,
+                compareTotal: pending.order.compareAt,
+                couponCode: pending.order.coupon?.code,
+                couponDiscount: pending.order.coupon?.discount ?? 0,
+                gst: pending.order.gst,
+                total: pending.order.total,
+              }
+            : cartTotals
+        }
+        couponBox={pending ? null : <CouponBox coupon={coupon} onChange={setCoupon} />}
       />
     </section>
   );
@@ -242,7 +263,7 @@ function Payment({ pending, busy, error, onTestPay, onRazorpay }) {
   );
 }
 
-function Summary({ cart, totals: { subtotal, compareTotal, gst, total } }) {
+function Summary({ cart, totals: { subtotal, compareTotal, couponCode, couponDiscount = 0, gst, total }, couponBox = null }) {
   return (
     <motion.aside className="frame-royal h-fit bg-night-800 p-8 lg:sticky lg:top-28" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 1, ease, delay: 0.15 }}>
       <p className="eyebrow text-ivory">Summary</p>
@@ -256,17 +277,76 @@ function Summary({ cart, totals: { subtotal, compareTotal, gst, total } }) {
         </div>
       ))}
       <div className="mt-6 space-y-2 text-sm">
-        <Row label="Subtotal" value={formatINR(compareTotal)} />
+        <Row label="MRP" value={formatINR(compareTotal)} />
         {compareTotal > subtotal && <Row label="Pre-booking privilege (20%)" value={`− ${formatINR(compareTotal - subtotal)}`} gold />}
-        <Row label={`GST (${Math.round(LAUNCH.gstRate * 100)}%)`} value={formatINR(gst)} />
+        {couponDiscount > 0 && <Row label={`Coupon ${couponCode}`} value={`− ${formatINR(couponDiscount)}`} gold />}
         <Row label="Insured delivery" value="Complimentary" />
       </div>
+      {couponBox}
       <div className="mt-6 flex items-baseline justify-between border-t border-ivory/10 pt-6">
         <span className="eyebrow text-ivory">Total</span>
         <span className="font-serif text-4xl">{formatINR(total)}</span>
       </div>
-      <p className="mt-2 text-right text-xs text-ivory-mute">Inclusive of GST</p>
+      <p className="mt-2 text-right text-xs text-ivory-mute">
+        Includes {formatINR(gst)} GST ({Math.round(LAUNCH.gstRate * 100)}%)
+      </p>
     </motion.aside>
+  );
+}
+
+// Enter a code from RUBIIK (created in the admin dashboard); the server confirms it before it applies.
+function CouponBox({ coupon, onChange }) {
+  const [code, setCode] = useState("");
+  const [state, setState] = useState({ busy: false, error: "" });
+
+  const apply = async (e) => {
+    e.preventDefault();
+    if (!code.trim()) return;
+    setState({ busy: true, error: "" });
+    try {
+      const { coupon: c } = await postJSON("/api/coupons/check", { code });
+      onChange(c);
+      setCode("");
+      setState({ busy: false, error: "" });
+    } catch (err) {
+      setState({ busy: false, error: err.message });
+    }
+  };
+
+  if (coupon)
+    return (
+      <div className="mt-5 flex items-center justify-between gap-3 border border-gold/30 bg-gold/5 px-4 py-3 text-sm">
+        <span>
+          <span className="font-mono text-gold-light">{coupon.code}</span> <span className="text-ivory-dim">applied · {coupon.label}</span>
+        </span>
+        <button type="button" onClick={() => onChange(null)} className="text-[11px] uppercase tracking-[0.15em] text-ivory-mute hover:text-gold">
+          Remove
+        </button>
+      </div>
+    );
+
+  // A <div> rather than a nested <form>: the summary can sit beside the details form.
+  return (
+    <div className="mt-5">
+      <div className="flex items-end gap-3">
+        <label className="flex-1">
+          <span className="text-[10px] uppercase tracking-[0.2em] text-ivory-mute">Coupon code</span>
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            onKeyDown={(e) => e.key === "Enter" && apply(e)}
+            placeholder="Enter code"
+            maxLength={20}
+            className="field font-mono uppercase placeholder:font-sans placeholder:normal-case"
+            aria-label="Coupon code"
+          />
+        </label>
+        <button type="button" onClick={apply} disabled={state.busy || !code.trim()} className="btn-ghost !px-5 !py-3">
+          {state.busy ? "Checking…" : "Apply"}
+        </button>
+      </div>
+      {state.error && <p className="mt-2 text-xs text-red-300">{state.error}</p>}
+    </div>
   );
 }
 

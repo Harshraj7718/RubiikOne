@@ -23,11 +23,11 @@ export default function Terms() {
       </Section>
 
       <Section n="2" title="Prices and GST">
-        <p>Prices are in Indian Rupees and shown before GST. GST at {gst} is added at checkout on the amount you pay.</p>
+        <p>Prices are maximum retail prices (MRP) in Indian Rupees, inclusive of {gst} GST. You pay the price shown; nothing is added at checkout.</p>
         <List
           items={PRODUCTS.map((p) => (
             <>
-              <Strong>{p.edition}</Strong> — {formatINR(p.price)} + {gst} GST; {formatINR(unitPrice(p, "prebook"))} + {gst} GST during pre-booking.
+              <Strong>{p.edition}</Strong> — MRP {formatINR(p.price)}; {formatINR(unitPrice(p, "prebook"))} during pre-booking (both incl. GST).
             </>
           ))}
         />
@@ -40,7 +40,7 @@ export default function Terms() {
       <Section n="3" title="Pre-booking">
         <List
           items={[
-            `Pre-booking is open until the launch on ${launchDate}. Pre-orders receive a ${discount} privilege on the price before GST.`,
+            `Pre-booking is open until the launch on ${launchDate}. Pre-orders receive a ${discount} privilege on the MRP.`,
             `Each order may include up to ${MAX_PER_MODEL} pieces of each model.`,
             "You need a RUBIIK account to pre-order. You are responsible for keeping your password safe and for activity on your account.",
             "When you continue to payment, your pieces are held for 30 minutes. If payment is not completed in that time, they are released to other clients.",

@@ -134,9 +134,17 @@ function OrderDrawer({ order: o, onClose }) {
               <span>{formatINR(i.unitPrice * i.qty)}</span>
             </div>
           ))}
+          {o.coupon && (
+            <div className="flex justify-between py-1 text-sm text-gold-light">
+              <span>
+                Coupon <span className="font-mono">{o.coupon.code}</span>
+              </span>
+              <span>− {formatINR(o.coupon.discount)}</span>
+            </div>
+          )}
           {o.gst > 0 && (
             <div className="flex justify-between py-1 text-sm text-ivory-dim">
-              <span>GST</span>
+              <span>incl. GST</span>
               <span>{formatINR(o.gst)}</span>
             </div>
           )}
