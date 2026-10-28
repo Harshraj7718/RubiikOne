@@ -111,6 +111,14 @@
   }
 }
 
+/* Certificate of edition: on narrow cards (a large certificate on a phone) the label row and the
+   small print give way so the title, number, owner and serial fit. */
+.cert-narrow { display: none; }
+@container (max-width: 520px) {
+  .cert-wide { display: none; }
+  .cert-narrow { display: block; }
+}
+
 @keyframes foil {
   0%, 100% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }

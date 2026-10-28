@@ -154,6 +154,18 @@ function OrderDrawer({ order: o, onClose }) {
           </div>
         </div>
 
+        {o.status === "paid" && (
+          <div className="mt-6 flex flex-wrap items-center gap-4 text-[11px] uppercase tracking-[0.2em]">
+            <span className="text-ivory-mute">Invoice {o.invoiceNumber ?? "(issued on first download)"}</span>
+            <a href={`/api/admin/orders/${o.id}/invoice`} target="_blank" rel="noreferrer" className="text-ivory-dim hover:text-gold">
+              View
+            </a>
+            <a href={`/api/admin/orders/${o.id}/invoice?download=1`} className="text-gold hover:text-gold-light">
+              Download PDF
+            </a>
+          </div>
+        )}
+
         {o.certificates.length > 0 && (
           <div className="mt-8 space-y-4">
             <p className="text-[11px] uppercase tracking-[0.25em] text-gold">Certificates</p>

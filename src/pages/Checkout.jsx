@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useShop } from "../lib/shop.jsx";
 import { useAuth, shortName } from "../lib/auth.jsx";
 import { formatINR, LAUNCH, totalsFor } from "../data/catalog.js";
+import { STATES } from "../data/states.js";
 import { Emblem } from "../components/Logo.jsx";
 import { ease } from "../components/motion.jsx";
 import AuthForm from "../components/AuthForm.jsx";
@@ -15,6 +16,7 @@ const FIELDS = [
   ["phone", "Mobile number", "tel", "tel"],
   ["address", "Delivery address", "text", "street-address"],
   ["city", "City", "text", "address-level2"],
+  ["state", "State", "select", "address-level1"],
   ["pincode", "PIN code", "text", "postal-code"],
 ];
 
@@ -47,7 +49,7 @@ export default function Checkout() {
   const cartTotals = { subtotal: t.subtotal, compareTotal: t.listTotal, couponCode: coupon?.code, couponDiscount: t.couponDiscount, gst: t.gst, total: t.total };
   const total = t.total;
   const { user, ready, logout } = useAuth();
-  const [form, setForm] = useState({ phone: "", address: "", city: "", pincode: "" });
+  const [form, setForm] = useState({ phone: "", address: "", city: "", state: "", pincode: "" });
   const [wall, setWall] = useState({ show: true, displayName: "" });
   const [state, setState] = useState({ busy: false, error: "", fields: [] });
   const [pending, setPending] = useState(null); // { order, payment } awaiting payment
@@ -146,15 +148,35 @@ export default function Checkout() {
                 {FIELDS.map(([key, label, type, ac]) => (
                   <label key={key} className={key === "address" ? "sm:col-span-2" : ""}>
                     <span className={`eyebrow ${state.fields.includes(key) ? "!text-red-300" : ""}`}>{label}</span>
-                    <input
-                      className={`field ${state.fields.includes(key) ? "!border-red-300" : ""}`}
-                      type={type}
-                      autoComplete={ac}
-                      inputMode={key === "pincode" ? "numeric" : undefined}
-                      value={form[key]}
-                      onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                      required
-                    />
+                    {type === "select" ? (
+                      // The state decides the GST shown on the invoice (CGST + SGST or IGST).
+                      <select
+                        className={`field bg-night ${form[key] ? "" : "text-ivory-mute/60"} ${state.fields.includes(key) ? "!border-red-300" : ""}`}
+                        autoComplete={ac}
+                        value={form[key]}
+                        onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                        required
+                      >
+                        <option value="" disabled>
+                          Choose your state
+                        </option>
+                        {STATES.map(([name]) => (
+                          <option key={name} value={name} className="text-ivory">
+                            {name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        className={`field ${state.fields.includes(key) ? "!border-red-300" : ""}`}
+                        type={type}
+                        autoComplete={ac}
+                        inputMode={key === "pincode" ? "numeric" : undefined}
+                        value={form[key]}
+                        onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                        required
+                      />
+                    )}
                   </label>
                 ))}
               </div>
@@ -388,6 +410,9 @@ function Confirmation({ order }) {
         <Link to="/account" className="btn-gold">
           View my collection
         </Link>
+        <a href={`/api/orders/${order.id}/invoice?download=1`} className="btn-ghost">
+          Download invoice (PDF)
+        </a>
         <Link to="/#owners" className="btn-ghost">
           See the owners wall
         </Link>

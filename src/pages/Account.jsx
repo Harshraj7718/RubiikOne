@@ -32,6 +32,7 @@ export default function Account() {
 
   const certificates = (orders ?? []).filter((o) => o.status === "paid").flatMap((o) => o.certificates);
   const awaiting = (orders ?? []).filter((o) => o.status === "pending_payment");
+  const paidOrders = (orders ?? []).filter((o) => o.status === "paid");
 
   return (
     <section className="mx-auto min-h-screen max-w-5xl px-5 pb-28 pt-36 sm:px-10">
@@ -63,6 +64,27 @@ export default function Account() {
             <motion.div key={c.serial} initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1, ease, delay: i * 0.15 }}>
               <Certificate cert={c} name={c.ownerName} size="lg" />
             </motion.div>
+          ))}
+        </div>
+      )}
+
+      {paidOrders.length > 0 && (
+        <div className="mt-16">
+          <h2 className="font-serif text-2xl">Invoices</h2>
+          {paidOrders.map((o) => (
+            <div key={o.id} className="mt-4 flex flex-wrap items-center justify-between gap-4 border-b border-ivory/10 py-4 text-ivory-dim">
+              <span>
+                <span className="text-ivory">{o.invoiceNumber ?? o.id}</span> · {o.items.map((i) => `${i.qty}× ${i.name.replace("RUBIIK ONE ", "")}`).join(", ")} · {formatINR(o.total)}
+              </span>
+              <span className="flex gap-5 text-[11px] uppercase tracking-[0.2em]">
+                <a href={`/api/orders/${o.id}/invoice`} target="_blank" rel="noreferrer" className="hover:text-gold">
+                  View
+                </a>
+                <a href={`/api/orders/${o.id}/invoice?download=1`} className="text-gold hover:text-gold-light">
+                  Download PDF
+                </a>
+              </span>
+            </div>
           ))}
         </div>
       )}

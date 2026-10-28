@@ -53,7 +53,7 @@ const shortName = (name = "") => {
   return last ? `${first} ${last[0].toUpperCase()}.` : first ?? "";
 };
 
-export function mountAdmin(app, { users, orders, waitlist, sessions, coupons }, { root }) {
+export function mountAdmin(app, { users, orders, waitlist, sessions, coupons }, { root, sendInvoice }) {
   const limitLogin = createLimiter({ max: 5, windowMs: 15 * 60 * 1000 });
 
   /** The signed-in admin for this request, or null. Admin sessions live in `sessions` with admin: true. */
@@ -114,6 +114,7 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons }, 
     compareAt: o.compareAt,
     gst: o.gst ?? 0,
     total: orderTotal(o),
+    invoiceNumber: o.invoice?.number ?? null,
     coupon: o.coupon ? { code: o.coupon.code, discount: o.coupon.discount } : null,
     wall: o.wall,
     certificates: o.certificates ?? [],
@@ -231,6 +232,10 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons }, 
   });
 
   // Owners wall moderation: show or hide a paid order's card.
+  app.get("/api/admin/orders/:id/invoice", requireAdmin, async (req, res) => {
+    await sendInvoice(res, await orders.findOne({ _id: req.params.id }), { download: req.query.download === "1" });
+  });
+
   // ---------- Coupons ----------
   // Codes are stored upper-case as the document _id. Uses are counted from orders (paid, or held
   // and still within their payment window), so cancelled or abandoned checkouts free their use.

@@ -26,6 +26,7 @@ export const PRODUCTS = [
     blurb:
       "An open-worked automatic calibre framed by a sculpted, sandblasted gunmetal case. The skeletal dial unveils a deeper perspective — complexity made beautiful.",
     price: 49999, // MRP, incl. 18% GST
+    hsn: "9102", // wrist-watches (non-precious-metal case), for GST invoices
     accent: "#8d9094",
     images: {
       cutout: "/images/skeleton-watch.webp",
@@ -60,6 +61,7 @@ export const PRODUCTS = [
     blurb:
       "A sunray olive dial with rose-gold indices, set in a brushed olive octagonal case. Precise Japanese quartz in a silhouette that speaks without saying too much.",
     price: 39999, // MRP, incl. 18% GST
+    hsn: "9102",
     accent: "#8a9a3a",
     images: {
       cutout: "/images/olive-watch.webp",

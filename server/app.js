@@ -9,9 +9,11 @@ import { existsSync } from "node:fs";
 import { randomUUID, randomBytes, createHmac } from "node:crypto";
 import { PRODUCTS, LAUNCH, findProduct, phaseAt, unitPrice, totalsFor, formatDate, couponLabel } from "../src/data/catalog.js";
 import { connectDb } from "./db.js";
+import { stateCode } from "../src/data/states.js";
 import { mountAuth } from "./auth.js";
 import { mountAdmin, createLimiter } from "./admin.js";
 import { PAYMENT_MODE, startPayment, verifyPayment } from "./payments.js";
+import { invoicePdf } from "./invoice.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const FORCE_PREBOOK = process.argv.includes("--force-prebook") || process.env.FORCE_PREBOOK === "1";
@@ -52,7 +54,7 @@ export async function createApp({ serveClient = true } = {}) {
   app.use(compression());
   app.use(express.json({ limit: "32kb" }));
   const { requireUser } = mountAuth(app, store);
-  mountAdmin(app, store, { root });
+  mountAdmin(app, store, { root, sendInvoice });
 
   const phase = () => phaseAt(Date.now(), FORCE_PREBOOK);
   // Orders that currently claim pieces: paid ones, and unpaid ones whose hold hasn't lapsed.
@@ -75,6 +77,18 @@ export async function createApp({ serveClient = true } = {}) {
    * can never both take the last piece or receive the same edition number.
    */
   const lockEdition = (session) => meta.updateOne({ _id: "edition" }, { $inc: { version: 1 } }, { upsert: true, session });
+
+  /**
+   * Invoice numbers run without gaps within each Indian financial year (April–March), e.g.
+   * RBK/26-27/0001, from a counter per year in the meta collection.
+   */
+  async function nextInvoiceNumber(date, session) {
+    const ist = new Date(date.getTime() + 5.5 * 3600000);
+    const start = ist.getUTCMonth() >= 3 ? ist.getUTCFullYear() : ist.getUTCFullYear() - 1;
+    const fy = `${String(start).slice(2)}-${String(start + 1).slice(2)}`;
+    const counter = await meta.findOneAndUpdate({ _id: `invoice:${fy}` }, { $inc: { seq: 1 } }, { upsert: true, session, returnDocument: "after" });
+    return `RBK/${fy}/${String(counter.seq).padStart(4, "0")}`;
+  }
 
   /** Secret for serial check codes: SERIAL_SECRET, or one generated once and kept in the database. */
   async function serialSecret() {
@@ -99,6 +113,7 @@ export async function createApp({ serveClient = true } = {}) {
     gst: o.gst ?? 0,
     total: o.total ?? o.subtotal,
     coupon: o.coupon ? { code: o.coupon.code, discount: o.coupon.discount } : null,
+    invoiceNumber: o.invoice?.number ?? null,
     customer: { name: o.customer.name, city: o.customer.city },
     wall: o.wall,
     certificates: o.certificates ?? [],
@@ -162,6 +177,7 @@ export async function createApp({ serveClient = true } = {}) {
     const phone = String(customer.phone ?? "").trim();
     const address = String(customer.address ?? "").trim();
     const city = String(customer.city ?? "").trim();
+    const state = String(customer.state ?? "").trim();
     const pincode = String(customer.pincode ?? "").trim();
     const showOnWall = wall.show === true;
     const displayName = String(wall.displayName ?? "").trim().slice(0, 40);
@@ -170,6 +186,7 @@ export async function createApp({ serveClient = true } = {}) {
     if (!PHONE.test(phone)) problems.push("phone");
     if (address.length < 6) problems.push("address");
     if (city.length < 2) problems.push("city");
+    if (!stateCode(state)) problems.push("state");
     if (!/^\d{6}$/.test(pincode)) problems.push("pincode");
     if (showOnWall && displayName.length < 2) problems.push("displayName");
     if (problems.length) return res.status(400).json({ error: "Please check the highlighted fields.", fields: problems });
@@ -210,7 +227,7 @@ export async function createApp({ serveClient = true } = {}) {
           createdAt: new Date(),
           holdUntil: new Date(Date.now() + HOLD_MINUTES * 60000),
           phase: current,
-          customer: { name: req.user.name, email: req.user.email, phone, address, city, pincode },
+          customer: { name: req.user.name, email: req.user.email, phone, address, city, state, pincode },
           items: lines,
           // All amounts in rupees and GST-inclusive: subtotal is after the pre-booking discount, the
           // coupon comes off that, and total is what is charged; gst is the tax inside the total.
@@ -263,14 +280,45 @@ export async function createApp({ serveClient = true } = {}) {
           });
         });
         const payment = { ...o.payment, ...proof, paidAt: issuedAt };
-        await orders.updateOne({ _id: o._id }, { $set: { status: "paid", certificates, payment } }, { session });
-        return { ...o, status: "paid", certificates, payment };
+        const invoice = { number: await nextInvoiceNumber(issuedAt, session), date: issuedAt };
+        await orders.updateOne({ _id: o._id }, { $set: { status: "paid", certificates, payment, invoice } }, { session });
+        return { ...o, status: "paid", certificates, payment, invoice };
       });
       res.json({ order: orderView(order) });
     } catch (err) {
       if (!err.status) console.error(err);
       res.status(err.status ?? 500).json({ error: err.status ? err.message : "Something went wrong. Please try again." });
     }
+  });
+
+  /**
+   * Sends the GST invoice PDF for a paid order. Orders paid before invoices existed get their
+   * number now, in a transaction, so numbering stays sequential.
+   */
+  async function sendInvoice(res, o, { download = false } = {}) {
+    if (!o) return res.status(404).json({ error: "Order not found." });
+    if (o.status !== "paid") return res.status(409).json({ error: "An invoice is issued once payment is complete." });
+    if (!o.invoice) {
+      o.invoice = await withTransaction(async (session) => {
+        const fresh = await orders.findOne({ _id: o._id }, { session });
+        if (fresh.invoice) return fresh.invoice;
+        const invoice = { number: await nextInvoiceNumber(new Date(fresh.payment?.paidAt ?? fresh.createdAt), session), date: new Date(fresh.payment?.paidAt ?? fresh.createdAt) };
+        await orders.updateOne({ _id: o._id }, { $set: { invoice } }, { session });
+        return invoice;
+      });
+    }
+    const pdf = await invoicePdf(o);
+    const file = `RUBIIK-invoice-${o.invoice.number.replaceAll("/", "-")}.pdf`;
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `${download ? "attachment" : "inline"}; filename="${file}"`);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.send(pdf);
+  }
+
+  // Customers can only fetch invoices for their own orders.
+  app.get("/api/orders/:id/invoice", requireUser, async (req, res) => {
+    const o = await orders.findOne({ _id: req.params.id, userId: req.user._id });
+    await sendInvoice(res, o, { download: req.query.download === "1" });
   });
 
   app.get("/api/me/orders", requireUser, async (req, res) => {

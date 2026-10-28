@@ -78,6 +78,8 @@ Prices and stock are always recomputed on the server.
 3. **Payment** — the order holds its pieces for 30 minutes while payment completes.
 4. **Certificate of Edition** — once payment is verified, each watch gets the next number in the shared edition and a serial such as `RBK-AS-017-7F3C` (model code, number, keyed check code). Customers see their certificates on `/account`.
 
+5. **Invoice** — once payment is verified the order gets the next GST invoice number for the financial year (`RBK/26-27/0001`, …). Customers download the PDF from the confirmation page and **/account → Invoices**; admins from the order details. The invoice shows the seller (`src/data/legal.js`: company, address, GSTIN), HSN 9102, serials, and CGST + SGST for buyers in Uttar Pradesh or IGST elsewhere (the buyer's state is asked at checkout). Built on the server with PDFKit (`server/invoice.js`).
+
 The **Founding Owners wall** (right after the hero) shows certificates of owners who opted in, with only their chosen display name.
 
 ### Payments
