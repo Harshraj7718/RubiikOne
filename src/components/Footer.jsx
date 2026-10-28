@@ -3,7 +3,7 @@ import { Wordmark } from "./Logo.jsx";
 import { Seal } from "./Ornament.jsx";
 import { Marquee } from "./motion.jsx";
 import { EdgeVeins } from "./GoldVeins.jsx";
-import { CONTACT, dialable } from "../data/legal.js";
+import { CONTACT } from "../data/legal.js";
 import { LAUNCH, formatDate } from "../data/catalog.js";
 import { useShop } from "../lib/shop.jsx";
 
@@ -39,16 +39,6 @@ export default function Footer() {
         </div>
         <address className="space-y-3 text-sm not-italic text-ivory-dim">
           <p className="eyebrow mb-5 text-ivory">Contact</p>
-          <p>
-            <a href={`tel:${dialable(CONTACT.phone)}`} className="transition-colors hover:text-gold">
-              {CONTACT.phone}
-            </a>
-          </p>
-          <p>
-            <a href={`https://wa.me/${dialable(CONTACT.whatsapp).replace("+", "")}`} target="_blank" rel="noreferrer" className="transition-colors hover:text-gold">
-              WhatsApp · {CONTACT.whatsapp}
-            </a>
-          </p>
           <p>
             <a href={`mailto:${CONTACT.email}`} className="transition-colors hover:text-gold">
               {CONTACT.email}

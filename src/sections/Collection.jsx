@@ -27,7 +27,7 @@ export default function Collection() {
   return (
     <section id="collection" className="relative isolate">
       <div className="mx-auto max-w-[1600px] px-5 pb-20 pt-28 sm:px-10 sm:pt-40">
-        <Chapter n="IV" title="The signature collection" className="mb-6" />
+        <Chapter n="II" title="The signature collection" className="mb-6" />
         <h2 className="font-serif text-6xl leading-none sm:text-[9vw]">
           <SplitReveal text="RUBIIK ONE" />
         </h2>

@@ -33,9 +33,9 @@ export default function Home({ ready }) {
         items={[`Limited to ${LAUNCH.editionSize} pieces`, ...launchNews, "Every second has a shape"]}
       />
       <Manifesto />
+      <Collection />
       <Meaning />
       <Vision />
-      <Collection />
       <Gallery />
       <Blueprint
         product={AUTOMATIC}

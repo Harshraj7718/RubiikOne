@@ -108,7 +108,7 @@ on the server. To change the password, edit the variable and restart (or redeplo
 
 ## Where things live
 
-- `src/sections/` — home page sections (Hero, Owners, Manifesto, Meaning, Vision, Collection, Gallery, Blueprint, Details, Experience, Limited, PreBook, Finale)
+- `src/sections/` — home page sections (in page order: Hero, Owners, Manifesto, Collection, Meaning, Vision, Gallery, Blueprint, Details, Experience, Limited, PreBook, Finale)
 - `src/pages/` — product detail, checkout (sign in → details → payment → certificate) and account
 - `src/pages/Privacy.jsx`, `src/pages/Terms.jsx` — Privacy Policy (`/privacy`) and Terms of Service (`/terms`); the contact email and date are in `src/data/legal.js`
 - `src/components/Certificate.jsx` — the owner's certificate card

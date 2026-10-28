@@ -37,7 +37,7 @@ export default function Vision() {
         </div>
 
         <div className="flex flex-col justify-center">
-          <Chapter n="III" title="The vision" className="mb-6" />
+          <Chapter n="IV" title="The vision" className="mb-6" />
           <h2 className="font-serif text-5xl leading-[1.02] sm:text-7xl">
             <SplitReveal text="Two I's." by="word" />
             <br />

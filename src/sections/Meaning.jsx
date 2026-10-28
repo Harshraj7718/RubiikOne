@@ -43,7 +43,7 @@ export default function Meaning() {
         />
 
         <div className="relative mx-auto w-full max-w-[1600px] px-5 pt-24 sm:px-10 sm:pt-28">
-          <Chapter n="II" title="The meaning of RUBIIK" />
+          <Chapter n="III" title="The meaning of RUBIIK" />
           <h2 className="mt-4 font-serif text-3xl sm:text-5xl">
             Six letters. <span className="italic text-gold">One way of seeing.</span>
           </h2>
