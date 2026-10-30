@@ -1,10 +1,11 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, Link, Navigate } from "react-router-dom";
 import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
 import { findProduct, PRODUCTS, LAUNCH, formatINR, unitPrice, GST_LABEL } from "../data/catalog.js";
 import { useShop, MAX_PER_MODEL } from "../lib/shop.jsx";
 import { SplitReveal, FadeUp, Magnetic, ParallaxImage, ease } from "../components/motion.jsx";
 import { EdgeVeins } from "../components/GoldVeins.jsx";
+import { viewContent } from "../lib/pixel.js";
 
 export default function Product() {
   const { slug } = useParams();
@@ -16,6 +17,11 @@ export default function Product() {
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end start"] });
   const watchY = useTransform(scrollYProgress, [0, 1], [0, 160]);
   const nameX = useTransform(scrollYProgress, [0, 1], ["0%", "-25%"]);
+
+  // Meta Pixel: a product was viewed (once per product, not on every re-render).
+  useEffect(() => {
+    if (p) viewContent(p, phase);
+  }, [p?.slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!p) return <Navigate to="/" replace />;
   const other = PRODUCTS.find((q) => q.slug !== p.slug);

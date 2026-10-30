@@ -14,6 +14,6 @@ export const CONTACT = {
 export const LEGAL = {
   brand: "RUBIIK",
   company: CONTACT.company,
-  updated: "25 October 2026",
+  updated: "30 October 2026",
   contactEmail: CONTACT.email,
 };

@@ -8,6 +8,7 @@ import Nav from "./components/Nav.jsx";
 import CartDrawer from "./components/CartDrawer.jsx";
 import Footer from "./components/Footer.jsx";
 import Home from "./pages/Home.jsx";
+import { pageView } from "./lib/pixel.js";
 
 // Everything except the home page is loaded on demand, so the first visit downloads only what it shows.
 const Product = lazy(() => import("./pages/Product.jsx"));
@@ -59,6 +60,9 @@ export default function App() {
     if (cartOpen || !loaded) lenis.stop();
     else lenis.start();
   }, [cartOpen, loaded]);
+
+  // Meta Pixel: count each page the visitor moves to (the first is counted by the base code).
+  useEffect(() => pageView(location.pathname), [location.pathname]);
 
   useEffect(() => {
     if (location.hash) setTimeout(() => scrollToId(location.hash.slice(1)), 400);

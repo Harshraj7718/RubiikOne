@@ -1,6 +1,7 @@
 // Cart, launch phase and live stock, shared across the app.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { PRODUCTS, LAUNCH, findProduct, phaseAt, unitPrice, totalsFor } from "../data/catalog.js";
+import { addToCart } from "./pixel.js";
 
 const ShopContext = createContext(null);
 const CART_KEY = "rubiik.cart";
@@ -50,13 +51,14 @@ export function ShopProvider({ children }) {
   }, [cart]);
 
   const add = useCallback((slug, qty = 1) => {
+    addToCart(slug, qty, status.phase);
     setCart((c) => {
       const line = c.find((l) => l.slug === slug);
       if (line) return c.map((l) => (l.slug === slug ? { ...l, qty: Math.min(MAX_PER_MODEL, l.qty + qty) } : l));
       return [...c, { slug, qty: Math.min(MAX_PER_MODEL, qty) }];
     });
     setCartOpen(true);
-  }, []);
+  }, [status.phase]);
   const setQty = useCallback((slug, qty) => {
     setCart((c) => (qty <= 0 ? c.filter((l) => l.slug !== slug) : c.map((l) => (l.slug === slug ? { ...l, qty: Math.min(MAX_PER_MODEL, qty) } : l))));
   }, []);

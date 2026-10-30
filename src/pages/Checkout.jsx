@@ -11,7 +11,10 @@ import { ease } from "../components/motion.jsx";
 import AuthForm from "../components/AuthForm.jsx";
 import Certificate from "../components/Certificate.jsx";
 import DeliveryNote from "../components/DeliveryNote.jsx";
+// The RUBIIK emblem as an embedded image, which Razorpay shows on any domain (see tools/razorpay-logo.mjs).
+import razorpayLogo from "../assets/razorpayLogo.js";
 import { scrollTop } from "../App.jsx";
+import { initiateCheckout, purchase } from "../lib/pixel.js";
 
 const FIELDS = [
   ["phone", "Mobile number", "tel", "tel"],
@@ -65,6 +68,7 @@ export default function Checkout() {
     try {
       const data = await postJSON(`/api/orders/${order.id}/verify`, proof);
       setPaid(data.order);
+      purchase(data.order); // Meta Pixel: the verified amount paid, de-duplicated by order number
       setPending(null);
       clear();
       refreshStatus();
@@ -82,10 +86,12 @@ export default function Checkout() {
         amount: payment.amount,
         currency: payment.currency,
         order_id: payment.providerOrderId,
+        // Brand the Razorpay window: the RUBIIK emblem, ink as the theme colour and a deep ink backdrop.
         name: "RUBIIK",
-        description: `Pre-order ${order.id}`,
+        description: `RUBIIK ONE · Pre-order ${order.id}`,
+        image: razorpayLogo,
         prefill: { name: payment.name, email: payment.email, contact: payment.contact },
-        theme: { color: "#0B1219" },
+        theme: { color: "#0B1219", backdrop_color: "#05080C" },
         handler: (resp) => finish(order, resp),
         modal: { ondismiss: () => setState({ busy: false, error: "Payment was not completed. Your pieces stay held for 30 minutes.", fields: [] }) },
       }).open();
@@ -96,6 +102,7 @@ export default function Checkout() {
 
   const submit = async (e) => {
     e.preventDefault();
+    initiateCheckout(cart, total); // Meta Pixel
     setState({ busy: true, error: "", fields: [] });
     try {
       const data = await postJSON("/api/prebook", { customer: form, wall, couponCode: coupon?.code ?? "", items: cart.map((l) => ({ slug: l.slug, qty: l.qty })) });

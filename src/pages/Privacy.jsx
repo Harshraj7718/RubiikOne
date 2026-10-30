@@ -45,7 +45,10 @@ export default function Privacy() {
             "To prevent fraud and misuse, and to meet our legal, tax and accounting obligations, including GST invoicing.",
           ]}
         />
-        <p>We do not sell your personal information, and we do not use it for advertising.</p>
+        <p>
+          We do not sell your personal information. We use the Meta Pixel (see section 4) to measure our advertising on Facebook and Instagram, but we never share
+          your name, address, phone number or email address with Meta.
+        </p>
       </Section>
 
       <Section n="3" title="Who we share it with">
@@ -64,6 +67,10 @@ export default function Privacy() {
             <>
               <Strong>Our delivery partner</Strong> — receives your name, phone number and address to deliver your watch.
             </>,
+            <>
+              <Strong>Meta (Facebook and Instagram)</Strong> — receives, through the Meta Pixel, which pages you visit and when you add a watch to your
+              selection, start checkout or complete a purchase (the models, quantities and amount), under Meta’s own privacy policy.
+            </>,
           ]}
         />
         <p>We may also disclose information when required by law or to protect our rights and our customers.</p>
@@ -74,9 +81,13 @@ export default function Privacy() {
           items={[
             "A sign-in cookie keeps you logged in for up to 30 days. It is essential to your account and is removed when you sign out.",
             "Your browser’s local storage remembers the watches in your selection, so your cart is still there when you return.",
+            "The Meta Pixel sets Meta’s cookies so we can measure how our Facebook and Instagram ads perform and show them to people likely to be interested.",
           ]}
         />
-        <p>We do not use advertising or third-party tracking cookies.</p>
+        <p>
+          You can limit ad tracking in your browser’s privacy settings or in your Facebook and Instagram ad preferences. Our own cookie and storage are not used for
+          advertising.
+        </p>
       </Section>
 
       <Section n="5" title="Security">

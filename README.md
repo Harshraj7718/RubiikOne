@@ -92,6 +92,7 @@ The **Founding Owners wall** (right after the hero) shows certificates of owners
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | Enables real Razorpay Checkout; every payment is verified by its signature |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | Sends email from support@rubiikone.com; without them emails are printed to the server log |
 | `SITE_URL` | The public address used in email links (e.g. `https://rubiikone.com`) |
+| `VITE_META_PIXEL_ID` | Optional override of the built-in Meta Pixel ID (2624778291293532). Built pages get Meta's base code in `<head>`; the shop sends PageView, ViewContent, AddToCart, InitiateCheckout and Purchase (`src/lib/pixel.js`). Localhost and the dev server are never tracked |
 | `SERIAL_SECRET` | Key for serial check codes (optional; otherwise one is generated and kept in the data file) |
 
 Without the Razorpay keys the store runs in **test mode**: the payment step is clearly labelled and simulates a successful payment, so no money is ever charged.
