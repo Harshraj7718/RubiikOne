@@ -59,7 +59,7 @@ export async function createApp({ serveClient = true } = {}) {
   const siteUrl = (req) => (process.env.SITE_URL || `${req.protocol}://${req.get("host")}`).replace(/\/$/, "");
 
   const { requireUser } = mountAuth(app, store, { siteUrl });
-  mountAdmin(app, store, { root, sendDocument, dispatchOrder, sendConfirmation, siteUrl });
+  mountAdmin(app, store, { root, sendDocument, dispatchOrder, sendConfirmation, sendDispatchEmail, siteUrl });
 
   const phase = () => phaseAt(Date.now(), FORCE_PREBOOK);
   // Orders that currently claim pieces: paid ones, and unpaid ones whose hold hasn't lapsed.
@@ -391,10 +391,15 @@ export async function createApp({ serveClient = true } = {}) {
       await orders.updateOne({ _id: id }, { $set: { dispatch, invoice } }, { session });
       return { ...o, dispatch, invoice };
     });
-    const mail = dispatchEmail(order, { siteUrl: siteUrl(req) });
+    return { order, email: await sendDispatchEmail(order, siteUrl(req)) };
+  }
+
+  /** Emails a dispatched order's tracking details with its tax invoice and records the outcome. */
+  async function sendDispatchEmail(order, site) {
+    const mail = dispatchEmail(order, { siteUrl: site });
     const result = await trySendMail({ to: order.customer.email, ...mail, attachments: [{ filename: docFile(order, "invoice"), content: await invoicePdf(order) }] });
-    await orders.updateOne({ _id: id }, { $set: { "emails.dispatch": { at: new Date(), mode: MAIL_MODE, ok: !result.failed } } });
-    return { order, email: result };
+    await orders.updateOne({ _id: order._id }, { $set: { "emails.dispatch": { at: new Date(), mode: MAIL_MODE, ok: !result.failed } } });
+    return result;
   }
 
   // Customers can only fetch documents for their own orders.

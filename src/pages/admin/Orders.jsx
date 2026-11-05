@@ -4,9 +4,6 @@ import { formatINR } from "../../data/catalog.js";
 import Certificate from "../../components/Certificate.jsx";
 import { PageHeader, StatusBadge, Loading, useAdminData, fmtDateTime } from "./ui.jsx";
 
-const MAIL_RESULT = (m) => (m.ok ? (m.mode === "smtp" ? "sent" : "logged") : "failed");
-const emailSummary = (emails = {}) =>
-  [emails.confirmation && `Confirmation ${MAIL_RESULT(emails.confirmation)}`, emails.dispatch && `Dispatch ${MAIL_RESULT(emails.dispatch)}`].filter(Boolean).join(" · ") || "—";
 
 function DocLinks({ label, href }) {
   return (
@@ -40,7 +37,13 @@ function Dispatch({ order: o, onChanged }) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Couldn't mark this order as dispatched.");
       setState({ busy: false, error: "", done: `Tax invoice ${data.invoiceNumber} issued ${DISPATCH_NOTE[data.email]}.` });
-      onChanged({ invoiceNumber: data.invoiceNumber, dispatch: { at: o.dispatch?.at ?? new Date().toISOString(), ...form } });
+      const sent = data.email !== "failed";
+      onChanged({
+        invoiceNumber: data.invoiceNumber,
+        dispatch: { at: o.dispatch?.at ?? new Date().toISOString(), ...form },
+        emails: { ...o.emails, dispatch: { at: new Date().toISOString(), mode: data.email === "sent" ? "smtp" : "log", ok: sent } },
+        unsentEmails: [...(o.unsentEmails ?? []).filter((k) => k !== "dispatch"), ...(sent ? [] : ["dispatch"])],
+      });
     } catch (err) {
       setState({ busy: false, error: err.message, done: "" });
     }
@@ -67,29 +70,94 @@ function Dispatch({ order: o, onChanged }) {
   );
 }
 
-/** Re-sends the order confirmation email with the receipt attached. */
-function ResendConfirmation({ order: o, onChanged }) {
-  const [state, setState] = useState({ busy: false, error: "", done: "" });
-  const resend = async () => {
-    setState({ busy: true, error: "", done: "" });
+const EMAILS = {
+  confirmation: { label: "Order confirmation", note: "with the receipt" },
+  dispatch: { label: "Dispatch email", note: "with tracking and the tax invoice" },
+};
+const mailStatus = (m) => (!m ? "Not sent yet" : !m.ok ? `Failed · ${fmtDateTime(m.at)}` : m.mode === "smtp" ? `Sent · ${fmtDateTime(m.at)}` : `Logged only · ${fmtDateTime(m.at)}`);
+
+/** The order's customer emails, each with a button to send it by hand if it didn't go out on its own. */
+function Emails({ order: o, onChanged }) {
+  const [state, setState] = useState({ busy: "", error: "", done: "" });
+  const send = async (kind) => {
+    setState({ busy: kind, error: "", done: "" });
     try {
-      const res = await fetch(`/api/admin/orders/${o.id}/confirmation`, { method: "POST" });
+      const res = await fetch(`/api/admin/orders/${o.id}/emails/${kind}`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Couldn't send the confirmation email.");
+      if (!res.ok) throw new Error(data.error ?? "Couldn't send the email.");
+      const record = { at: new Date().toISOString(), mode: data.email === "sent" ? "smtp" : "log", ok: data.email !== "failed" };
+      onChanged({ emails: { ...o.emails, [kind]: record }, unsentEmails: data.email === "failed" ? o.unsentEmails : (o.unsentEmails ?? []).filter((k) => k !== kind) });
       if (data.email === "failed") throw new Error(`The email failed to send${data.error ? `: ${data.error}` : "."}`);
-      setState({ busy: false, error: "", done: data.email === "sent" ? `Confirmation emailed to ${o.customer.email}.` : "The email went to the server log, because SMTP isn't set up yet." });
-      onChanged({ emails: { ...o.emails, confirmation: { at: new Date().toISOString(), mode: data.email === "sent" ? "smtp" : "log", ok: true } } });
+      setState({ busy: "", error: "", done: data.email === "sent" ? `${EMAILS[kind].label} sent to ${o.customer.email}.` : "The email went to the server log, because SMTP isn't set up yet." });
     } catch (err) {
-      setState({ busy: false, error: err.message, done: "" });
+      setState({ busy: "", error: err.message, done: "" });
     }
   };
+  const kinds = o.dispatch ? ["confirmation", "dispatch"] : ["confirmation"];
   return (
-    <div className="mt-4 text-sm">
-      <button type="button" onClick={resend} disabled={state.busy} className="text-gold hover:text-gold-light disabled:opacity-50">
-        {state.busy ? "Sending…" : o.emails?.confirmation ? "Re-send confirmation email" : "Send confirmation email"}
-      </button>
-      {state.done && <p className="mt-2 text-emerald-300">{state.done}</p>}
-      {state.error && <p className="mt-2 text-red-300">{state.error}</p>}
+    <div className="mt-8 border border-ivory/10 bg-night-900/50 p-5">
+      <p className="text-[11px] uppercase tracking-[0.25em] text-gold">Customer emails</p>
+      <ul className="mt-4 divide-y divide-ivory/10 text-sm">
+        {kinds.map((kind) => {
+          const m = o.emails?.[kind];
+          const unsent = o.unsentEmails?.includes(kind);
+          return (
+            <li key={kind} className="flex flex-wrap items-center justify-between gap-3 py-3">
+              <div>
+                <p>{EMAILS[kind].label} <span className="text-ivory-mute">· {EMAILS[kind].note}</span></p>
+                <p className={`mt-0.5 text-xs ${unsent ? "text-red-300" : "text-ivory-mute"}`}>{mailStatus(m)}</p>
+              </div>
+              <button type="button" onClick={() => send(kind)} disabled={Boolean(state.busy)} className={`${unsent ? "btn-gold" : "btn-ghost"} !px-4 !py-2 text-[10px] disabled:opacity-50`}>
+                {state.busy === kind ? "Sending…" : unsent ? "Send now" : "Re-send"}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {state.done && <p className="mt-3 text-sm text-emerald-300">{state.done}</p>}
+      {state.error && <p className="mt-3 text-sm text-red-300">{state.error}</p>}
+    </div>
+  );
+}
+
+/** Sends every email that hasn't gone out, in batches, until none are left or one fails. */
+function SendUnsent({ count, onDone }) {
+  const [state, setState] = useState({ busy: false, msg: "", error: "" });
+  const run = async () => {
+    if (!window.confirm(`Send ${count} unsent email${count === 1 ? "" : "s"} to customers now?`)) return;
+    setState({ busy: true, msg: "", error: "" });
+    let sent = 0;
+    try {
+      for (;;) {
+        const res = await fetch("/api/admin/emails/unsent", { method: "POST" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error ?? "Couldn't send the emails.");
+        sent += data.sent;
+        setState({ busy: true, msg: `${sent} sent…`, error: "" });
+        if (data.failed) throw new Error(`${data.failed} failed (${data.failures.map((f) => `${f.id} ${f.kind}`).join(", ")}): ${data.failures[0].error}`);
+        if (!data.remaining || !data.sent) break;
+      }
+      setState({ busy: false, msg: `${sent} email${sent === 1 ? "" : "s"} sent.`, error: "" });
+    } catch (err) {
+      setState({ busy: false, msg: sent ? `${sent} sent.` : "", error: err.message });
+    }
+    onDone();
+  };
+  if (!count && !state.msg && !state.error) return null;
+  return (
+    <div className="mb-6 flex flex-wrap items-center gap-4 border border-red-300/30 bg-red-300/5 px-4 py-3 text-sm">
+      {count > 0 && (
+        <>
+          <span>
+            {count} paid order{count === 1 ? " has an" : "s have"} email that didn’t reach the customer.
+          </span>
+          <button type="button" onClick={run} disabled={state.busy} className="btn-gold !px-4 !py-2 text-[10px] disabled:opacity-50">
+            {state.busy ? "Sending…" : "Send all unsent emails"}
+          </button>
+        </>
+      )}
+      {state.msg && <span className="text-emerald-300">{state.msg}</span>}
+      {state.error && <span className="text-red-300">{state.error}</span>}
     </div>
   );
 }
@@ -99,6 +167,7 @@ const FILTERS = [
   ["paid", "Paid"],
   ["pending_payment", "Awaiting payment"],
   ["expired", "Expired"],
+  ["unsent", "Emails not sent"],
 ];
 
 export default function Orders() {
@@ -120,6 +189,7 @@ export default function Orders() {
           </a>
         }
       />
+      <SendUnsent count={state.data?.unsent ?? 0} onDone={state.reload} />
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <div className="flex flex-wrap gap-1 border border-ivory/10 p-1">
           {FILTERS.map(([value, label]) => (
@@ -159,6 +229,7 @@ export default function Orders() {
                   <td className="px-4 py-3">{formatINR(o.total)}</td>
                   <td className="px-4 py-3">
                     <StatusBadge status={o.status} />
+                    {o.unsentEmails?.length > 0 && <span className="mt-1 block text-[10px] uppercase tracking-[0.12em] text-red-300">Email not sent</span>}
                   </td>
                   <td className="px-4 py-3 text-ivory-mute">{fmtDateTime(o.createdAt)}</td>
                 </tr>
@@ -218,7 +289,6 @@ function OrderDrawer({ order: o, onClose, onChanged }) {
             ["Paid", o.payment?.paidAt ? fmtDateTime(o.payment.paidAt) : "—"],
             ["Payment", o.payment ? `${o.payment.provider}${o.payment.reference ? ` · ${o.payment.reference}` : ""}` : "—"],
             ["Owners wall", o.wall?.show ? `Shown as “${o.wall.displayName}”` : "Not shown"],
-            ["Emails", emailSummary(o.emails)],
           ].map(([k, v]) => (
             <div key={k} className="contents">
               <dt className="text-[10px] uppercase tracking-[0.18em] text-ivory-mute">{k}</dt>
@@ -266,7 +336,7 @@ function OrderDrawer({ order: o, onClose, onChanged }) {
             )}
           </div>
         )}
-        {o.status === "paid" && <ResendConfirmation order={o} onChanged={onChanged} />}
+        {o.status === "paid" && <Emails order={o} onChanged={onChanged} />}
         {o.status === "paid" && <Dispatch order={o} onChanged={onChanged} />}
 
         {o.certificates.length > 0 && (

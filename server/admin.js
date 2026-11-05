@@ -57,7 +57,7 @@ const shortName = (name = "") => {
   return last ? `${first} ${last[0].toUpperCase()}.` : first ?? "";
 };
 
-export function mountAdmin(app, { users, orders, waitlist, sessions, coupons, admins, audit }, { root, sendDocument, dispatchOrder, sendConfirmation, siteUrl }) {
+export function mountAdmin(app, { users, orders, waitlist, sessions, coupons, admins, audit }, { root, sendDocument, dispatchOrder, sendConfirmation, sendDispatchEmail, siteUrl }) {
   const limitLogin = createLimiter({ max: 5, windowMs: 15 * 60 * 1000 });
   const ENV_OWNER = () => process.env.ADMIN_USERNAME;
 
@@ -152,7 +152,8 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons, ad
     [/^DELETE \/api\/admin\/coupons\/([^/]+)$/, () => "coupon.delete", (req, m) => decodeURIComponent(m[1]).toUpperCase()],
     [/^PATCH \/api\/admin\/orders\/([^/]+)\/wall$/, () => "wall.update", (req, m) => m[1], (req) => ({ show: req.body?.show, displayName: req.body?.displayName })],
     [/^POST \/api\/admin\/orders\/([^/]+)\/dispatch$/, () => "order.dispatch", (req, m) => m[1], (req, m, body) => ({ courier: req.body?.courier, tracking: req.body?.tracking, invoice: body?.invoiceNumber, email: body?.email })],
-    [/^POST \/api\/admin\/orders\/([^/]+)\/confirmation$/, () => "email.confirmation", (req, m) => m[1], (req, m, body) => ({ email: body?.email })],
+    [/^POST \/api\/admin\/orders\/([^/]+)\/emails\/(confirmation|dispatch)$/, (req, m) => `email.${m[2]}`, (req, m) => m[1], (req, m, body) => ({ email: body?.email })],
+    [/^POST \/api\/admin\/emails\/unsent$/, () => "email.unsent", () => null, (req, m, body) => ({ sent: body?.sent, failed: body?.failed, remaining: body?.remaining })],
     [/^GET \/api\/admin\/orders\/([^/]+)\/(receipt|invoice)$/, (req, m) => `document.${m[2]}`, (req, m) => m[1]],
     [/^GET \/api\/admin\/(orders|waitlist)\.csv$/, (req, m) => `export.${m[1]}`, () => null, (req) => (Object.keys(req.query).length ? req.query : null)],
     [/^POST \/api\/admin\/emails\/launch$/, () => "email.launch", () => null, (req, m, body) => ({ sent: body?.sent, failed: body?.failed, remaining: body?.remaining, mode: body?.mode })],
@@ -183,6 +184,13 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons, ad
   // An unpaid order whose hold has lapsed is reported as expired.
   const effectiveStatus = (o, now = Date.now()) => (o.status === "pending_payment" && new Date(o.holdUntil).getTime() <= now ? "expired" : o.status);
 
+  // An email counts as sent only when the mail server accepted it (not a failure, and not one that
+  // went to the log before SMTP was set up; without SMTP, logging is all that can happen). Paid orders need a
+  // confirmation; dispatched ones a dispatch email.
+  const delivered = (m) => Boolean(m?.ok && (m.mode === "smtp" || MAIL_MODE === "log"));
+  const unsentEmails = (o) =>
+    o.status !== "paid" ? [] : [!delivered(o.emails?.confirmation) && "confirmation", o.dispatch && !delivered(o.emails?.dispatch) && "dispatch"].filter(Boolean);
+
   const adminOrder = (o) => ({
     id: o._id,
     createdAt: o.createdAt,
@@ -198,6 +206,7 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons, ad
     invoiceNumber: o.invoice?.number ?? null,
     dispatch: o.dispatch ?? null,
     emails: o.emails ?? {},
+    unsentEmails: unsentEmails(o),
     coupon: o.coupon ? { code: o.coupon.code, discount: o.coupon.discount } : null,
     wall: o.wall,
     certificates: o.certificates ?? [],
@@ -247,7 +256,7 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons, ad
     const q = String(query.q ?? "").trim().toLowerCase();
     const list = (await orders.find({}).sort({ createdAt: -1 }).toArray()).map(adminOrder);
     return list.filter((o) => {
-      if (status !== "all" && o.status !== status) return false;
+      if (status === "unsent" ? !o.unsentEmails.length : status !== "all" && o.status !== status) return false;
       if (!q) return true;
       const hay = [o.id, o.customer.name, o.customer.email, o.customer.phone, o.customer.city, ...o.certificates.map((c) => c.serial)].join(" ").toLowerCase();
       return hay.includes(q);
@@ -255,7 +264,9 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons, ad
   }
 
   app.get("/api/admin/orders", requireAdmin, async (req, res) => {
-    res.json({ orders: await findOrders(req.query) });
+    const list = await findOrders(req.query);
+    const unsent = req.query.status === "unsent" ? list.length : (await findOrders({ status: "unsent" })).length;
+    res.json({ orders: list, unsent, mailMode: MAIL_MODE });
   });
 
   app.get("/api/admin/orders.csv", requireAdmin, async (req, res) => {
@@ -338,13 +349,34 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons, ad
     }
   });
 
-  // Re-sends a paid order's confirmation email with its receipt (e.g. after the mail server failed).
-  app.post("/api/admin/orders/:id/confirmation", requireAdmin, async (req, res) => {
+  // Sends (or re-sends) one of an order's customer emails by hand, for when it didn't go out on its own:
+  // the confirmation with the receipt, or the dispatch email with the tax invoice.
+  const EMAIL_SENDERS = { confirmation: sendConfirmation, dispatch: sendDispatchEmail };
+  const mailOutcome = (r) => ({ email: r.failed ? "failed" : r.sent ? "sent" : "logged", error: r.failed ? r.error : undefined });
+
+  app.post("/api/admin/orders/:id/emails/:kind", requireAdmin, async (req, res) => {
+    const send = EMAIL_SENDERS[req.params.kind];
+    if (!send) return res.status(404).json({ error: "Unknown email." });
     const order = await orders.findOne({ _id: req.params.id });
     if (!order) return res.status(404).json({ error: "Order not found." });
-    if (order.status !== "paid") return res.status(409).json({ error: "Only paid orders have a confirmation email." });
-    const result = await sendConfirmation(order, siteUrl(req));
-    res.json({ ok: true, email: result.failed ? "failed" : result.sent ? "sent" : "logged", error: result.failed ? result.error : undefined });
+    if (order.status !== "paid") return res.status(409).json({ error: "Emails can only be sent for paid orders." });
+    if (req.params.kind === "dispatch" && !order.dispatch) return res.status(409).json({ error: "Mark the order dispatched first." });
+    res.json({ ok: true, ...mailOutcome(await send(order, siteUrl(req))) });
+  });
+
+  // Sends every email that hasn't gone out yet, a few at a time so each call stays inside the hosting
+  // time limit; the dashboard keeps calling while emails remain and none failed.
+  const UNSENT_BATCH = 5;
+  app.post("/api/admin/emails/unsent", requireAdmin, async (req, res) => {
+    const pending = (await findOrders({ status: "unsent" })).flatMap((o) => o.unsentEmails.map((kind) => ({ id: o.id, kind })));
+    let sent = 0;
+    const failures = [];
+    for (const { id, kind } of pending.slice(0, UNSENT_BATCH)) {
+      const result = await EMAIL_SENDERS[kind](await orders.findOne({ _id: id }), siteUrl(req));
+      if (result.failed) failures.push({ id, kind, error: result.error });
+      else sent++;
+    }
+    res.json({ sent, failed: failures.length, failures, remaining: pending.length - sent - failures.length, mode: MAIL_MODE });
   });
 
   // ---------- Launch email ----------
