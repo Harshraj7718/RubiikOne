@@ -14,7 +14,7 @@ import { mountAuth } from "./auth.js";
 import { mountAdmin, createLimiter } from "./admin.js";
 import { PAYMENT_MODE, startPayment, verifyPayment } from "./payments.js";
 import { invoicePdf, receiptPdf } from "./invoice.js";
-import { trySendMail, inBackground, MAIL_MODE } from "./mailer.js";
+import { trySendMail, inBackground, mailRecord } from "./mailer.js";
 import { orderConfirmationEmail, dispatchEmail } from "./emails.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -344,7 +344,7 @@ export async function createApp({ serveClient = true } = {}) {
   async function sendConfirmation(order, site) {
     const mail = orderConfirmationEmail(order, { siteUrl: site });
     const result = await trySendMail({ to: order.customer.email, ...mail, attachments: [{ filename: docFile(order, "receipt"), content: await receiptPdf(order) }] });
-    await orders.updateOne({ _id: order._id }, { $set: { "emails.confirmation": { at: new Date(), mode: MAIL_MODE, ok: !result.failed } } });
+    await orders.updateOne({ _id: order._id }, { $set: { "emails.confirmation": mailRecord(result) } });
     return result;
   }
 
@@ -398,7 +398,7 @@ export async function createApp({ serveClient = true } = {}) {
   async function sendDispatchEmail(order, site) {
     const mail = dispatchEmail(order, { siteUrl: site });
     const result = await trySendMail({ to: order.customer.email, ...mail, attachments: [{ filename: docFile(order, "invoice"), content: await invoicePdf(order) }] });
-    await orders.updateOne({ _id: order._id }, { $set: { "emails.dispatch": { at: new Date(), mode: MAIL_MODE, ok: !result.failed } } });
+    await orders.updateOne({ _id: order._id }, { $set: { "emails.dispatch": mailRecord(result) } });
     return result;
   }
 

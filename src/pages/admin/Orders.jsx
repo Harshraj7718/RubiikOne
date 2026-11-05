@@ -74,7 +74,7 @@ const EMAILS = {
   confirmation: { label: "Order confirmation", note: "with the receipt" },
   dispatch: { label: "Dispatch email", note: "with tracking and the tax invoice" },
 };
-const mailStatus = (m) => (!m ? "Not sent yet" : !m.ok ? `Failed · ${fmtDateTime(m.at)}` : m.mode === "smtp" ? `Sent · ${fmtDateTime(m.at)}` : `Logged only · ${fmtDateTime(m.at)}`);
+const mailStatus = (m) => (!m ? "Not sent yet" : !m.ok ? `Failed · ${fmtDateTime(m.at)}${m.error ? ` · ${m.error}` : ""}` : m.mode === "smtp" ? `Sent · ${fmtDateTime(m.at)}` : `Logged only · ${fmtDateTime(m.at)}`);
 
 /** The order's customer emails, each with a button to send it by hand if it didn't go out on its own. */
 function Emails({ order: o, onChanged }) {
@@ -116,6 +116,30 @@ function Emails({ order: o, onChanged }) {
       </ul>
       {state.done && <p className="mt-3 text-sm text-emerald-300">{state.done}</p>}
       {state.error && <p className="mt-3 text-sm text-red-300">{state.error}</p>}
+    </div>
+  );
+}
+
+/** Logs in to the mail server without sending anything, and shows the result. */
+function CheckMail() {
+  const [state, setState] = useState({ busy: false, result: null });
+  const check = async () => {
+    setState({ busy: true, result: null });
+    const res = await fetch("/api/admin/emails/check", { method: "POST" }).catch(() => null);
+    const data = (await res?.json().catch(() => null)) ?? { ok: false, error: "Couldn't reach the server." };
+    setState({ busy: false, result: data });
+  };
+  const r = state.result;
+  return (
+    <div className="text-right">
+      <button type="button" onClick={check} disabled={state.busy} className="btn-ghost !px-5 !py-3 disabled:opacity-50">
+        {state.busy ? "Checking…" : "Check email settings"}
+      </button>
+      {r && (
+        <p className={`mt-2 max-w-sm text-xs ${r.ok ? "text-emerald-300" : "text-red-300"}`}>
+          {r.ok ? `Connected and logged in as ${r.server}.` : `${r.server ? `${r.server}: ` : ""}${r.error}`}
+        </p>
+      )}
     </div>
   );
 }
@@ -184,9 +208,12 @@ export default function Orders() {
         title="Orders"
         subtitle="Every pre-order, its payment status and the certificates it issued."
         actions={
-          <a href={`/api/admin/orders.csv?${query}`} className="btn-ghost !px-5 !py-3">
-            Export CSV
-          </a>
+          <div className="flex flex-wrap items-start gap-3">
+            <CheckMail />
+            <a href={`/api/admin/orders.csv?${query}`} className="btn-ghost !px-5 !py-3">
+              Export CSV
+            </a>
+          </div>
         }
       />
       <SendUnsent count={state.data?.unsent ?? 0} onDone={state.reload} />

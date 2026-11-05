@@ -10,7 +10,7 @@ import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto
 import express from "express";
 import { LAUNCH, PRODUCTS, EDITION_TOTAL, couponLabel } from "../src/data/catalog.js";
 import { readCookie, hashPassword, verifyPassword } from "./auth.js";
-import { trySendMail, MAIL_MODE } from "./mailer.js";
+import { trySendMail, checkMail, MAIL_MODE } from "./mailer.js";
 import { launchEmail } from "./emails.js";
 
 const ADMIN_COOKIE = "rbk_admin";
@@ -153,6 +153,7 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons, ad
     [/^PATCH \/api\/admin\/orders\/([^/]+)\/wall$/, () => "wall.update", (req, m) => m[1], (req) => ({ show: req.body?.show, displayName: req.body?.displayName })],
     [/^POST \/api\/admin\/orders\/([^/]+)\/dispatch$/, () => "order.dispatch", (req, m) => m[1], (req, m, body) => ({ courier: req.body?.courier, tracking: req.body?.tracking, invoice: body?.invoiceNumber, email: body?.email })],
     [/^POST \/api\/admin\/orders\/([^/]+)\/emails\/(confirmation|dispatch)$/, (req, m) => `email.${m[2]}`, (req, m) => m[1], (req, m, body) => ({ email: body?.email })],
+    [/^POST \/api\/admin\/emails\/check$/, () => "email.check", () => null, (req, m, body) => ({ ok: body?.ok, error: body?.error })],
     [/^POST \/api\/admin\/emails\/unsent$/, () => "email.unsent", () => null, (req, m, body) => ({ sent: body?.sent, failed: body?.failed, remaining: body?.remaining })],
     [/^GET \/api\/admin\/orders\/([^/]+)\/(receipt|invoice)$/, (req, m) => `document.${m[2]}`, (req, m) => m[1]],
     [/^GET \/api\/admin\/(orders|waitlist)\.csv$/, (req, m) => `export.${m[1]}`, () => null, (req) => (Object.keys(req.query).length ? req.query : null)],
@@ -366,6 +367,8 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons, ad
 
   // Sends every email that hasn't gone out yet, a few at a time so each call stays inside the hosting
   // time limit; the dashboard keeps calling while emails remain and none failed.
+  app.post("/api/admin/emails/check", requireAdmin, async (_req, res) => res.json(await checkMail()));
+
   const UNSENT_BATCH = 5;
   app.post("/api/admin/emails/unsent", requireAdmin, async (req, res) => {
     const pending = (await findOrders({ status: "unsent" })).flatMap((o) => o.unsentEmails.map((kind) => ({ id: o.id, kind })));
