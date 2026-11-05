@@ -9,6 +9,7 @@ import { existsSync } from "node:fs";
 import { randomUUID, randomBytes, createHmac } from "node:crypto";
 import { PRODUCTS, LAUNCH, EDITION_TOTAL, findProduct, phaseAt, unitPrice, totalsFor, formatDate, couponLabel } from "../src/data/catalog.js";
 import { connectDb } from "./db.js";
+import { CONTACT } from "../src/data/legal.js";
 import { stateCode } from "../src/data/states.js";
 import { mountAuth } from "./auth.js";
 import { mountAdmin, createLimiter } from "./admin.js";
@@ -203,6 +204,38 @@ export async function createApp({ serveClient = true } = {}) {
 
   const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
   const PHONE = /^[+\d][\d\s-]{8,15}$/;
+
+  // Unsubscribe from offer emails. The link carries a private per-account token. Opening it shows a
+  // confirm button (so mail scanners that open links don't unsubscribe anyone); the POST, which is
+  // also what Gmail's one-click "Unsubscribe" sends, does it. Order and account emails still arrive.
+  const unsubscribePage = (title, body) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${title} · RUBIIK</title></head>
+<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0B1219;color:#F9F9F9;font:16px/1.6 Arial,sans-serif;padding:24px;box-sizing:border-box">
+<main style="max-width:440px;text-align:center"><div style="font:400 24px Georgia,serif;letter-spacing:8px">RUB<span style="color:#C9A464">II</span>K</div>
+<h1 style="font:400 28px/1.3 Georgia,serif;margin:28px 0 12px">${title}</h1>${body}
+<p style="margin-top:28px"><a href="/" style="color:#C9A464">Back to rubiikone.com</a></p></main></body></html>`;
+  const unsubscribeToken = (req) => String(req.query.t ?? "").slice(0, 64);
+
+  app.get("/api/unsubscribe", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const user = await users.findOne({ emailToken: unsubscribeToken(req) || "-" }, { projection: { marketingOptOut: 1 } });
+    if (!user) return res.status(404).send(unsubscribePage("Link not recognised", `<p style="color:#B8BEC6">This unsubscribe link isn't valid. Write to ${CONTACT.email} and we'll stop offer emails for you.</p>`));
+    if (user.marketingOptOut) return res.send(unsubscribePage("You're unsubscribed", `<p style="color:#B8BEC6">You won't receive offer emails from us. Emails about your orders will still arrive.</p>`));
+    res.send(
+      unsubscribePage(
+        "Stop offer emails?",
+        `<p style="color:#B8BEC6">You'll stop receiving offers and news from RUBIIK. Emails about your orders and account will still arrive.</p>
+<form method="post"><button style="margin-top:12px;background:#C9A464;color:#0B1219;border:0;padding:15px 26px;font:600 13px Arial,sans-serif;letter-spacing:2px;text-transform:uppercase;cursor:pointer">Unsubscribe</button></form>`,
+      ),
+    );
+  });
+
+  app.post("/api/unsubscribe", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const token = unsubscribeToken(req);
+    const { matchedCount } = token ? await users.updateOne({ emailToken: token }, { $set: { marketingOptOut: true, marketingOptOutAt: new Date() } }) : { matchedCount: 0 };
+    if (!matchedCount) return res.status(404).send(unsubscribePage("Link not recognised", `<p style="color:#B8BEC6">This unsubscribe link isn't valid. Write to ${CONTACT.email} and we'll stop offer emails for you.</p>`));
+    res.send(unsubscribePage("You're unsubscribed", `<p style="color:#B8BEC6">You won't receive offer emails from us any more. Emails about your orders will still arrive.</p>`));
+  });
 
   app.post("/api/waitlist", async (req, res) => {
     const email = String(req.body?.email ?? "").trim().toLowerCase();

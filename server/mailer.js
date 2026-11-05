@@ -13,10 +13,10 @@ const FROM = process.env.MAIL_FROM || `RUBIIK <${CONTACT.email}>`;
 /** The last few emails in log mode (newest last), for local testing. */
 export const outbox = [];
 
-// The MilesWeb (cPanel/Exim) server waits ~14 s before greeting every new connection, more from
-// abroad, then answers quickly. So the greeting gets a generous wait, and a batch of emails shares
-// one connection (mailBatch) so that wait is paid once per batch, not once per email. Everything
-// still gives up well inside the function's time limit (vercel.json maxDuration).
+// Some mail servers (MilesWeb's cPanel/Exim) wait ~14 s before greeting each new connection. So the
+// greeting gets a generous wait, and a batch of emails shares one connection (mailBatch) so any such
+// wait is paid once per batch, not once per email. Everything still gives up well inside the
+// function's time limit (vercel.json maxDuration).
 function createTransport(pool = false) {
   const port = Number(SMTP_PORT || 465);
   return nodemailer.createTransport({
@@ -59,14 +59,14 @@ export async function checkMail() {
 }
 
 /** Sends one email; resolves to { sent } or { logged }. Throws only if SMTP rejects it. */
-export async function sendMail({ to, subject, html, text, attachments = [] }) {
+export async function sendMail({ to, subject, html, text, attachments = [], headers }) {
   if (MAIL_MODE === "log") {
     outbox.push({ to, subject, html, text, attachments: attachments.map((a) => a.filename), at: new Date() });
     if (outbox.length > 25) outbox.shift();
     console.log(`[mail:log] to=${to} · "${subject}"${attachments.length ? ` · attached ${attachments.map((a) => a.filename).join(", ")}` : ""}`);
     return { logged: true };
   }
-  await smtp().sendMail({ from: FROM, replyTo: CONTACT.email, to, subject, html, text, attachments });
+  await smtp().sendMail({ from: FROM, replyTo: CONTACT.email, to, subject, html, text, attachments, headers });
   return { sent: true };
 }
 

@@ -29,6 +29,7 @@ export default function Customers() {
                   <td className="px-4 py-3">
                     {c.name}
                     <span className="block text-xs text-ivory-mute">{c.email}</span>
+                    {c.unsubscribed && <span className="mt-1 block text-[10px] uppercase tracking-[0.18em] text-ivory-mute">Unsubscribed from offers</span>}
                   </td>
                   <td className="px-4 py-3 text-ivory-mute">{fmtDateTime(c.createdAt)}</td>
                   <td className="px-4 py-3">{c.orders}</td>

@@ -11,7 +11,7 @@ import express from "express";
 import { LAUNCH, PRODUCTS, EDITION_TOTAL, couponLabel } from "../src/data/catalog.js";
 import { readCookie, hashPassword, verifyPassword } from "./auth.js";
 import { trySendMail, checkMail, mailBatch, MAIL_MODE } from "./mailer.js";
-import { launchEmail } from "./emails.js";
+import { launchEmail, offerEmail } from "./emails.js";
 
 const ADMIN_COOKIE = "rbk_admin";
 const ADMIN_SESSION_HOURS = 12;
@@ -57,7 +57,7 @@ const shortName = (name = "") => {
   return last ? `${first} ${last[0].toUpperCase()}.` : first ?? "";
 };
 
-export function mountAdmin(app, { users, orders, waitlist, sessions, coupons, admins, audit }, { root, sendDocument, dispatchOrder, sendConfirmation, sendDispatchEmail, siteUrl }) {
+export function mountAdmin(app, { users, orders, waitlist, sessions, coupons, admins, audit, campaigns, campaignSends }, { root, sendDocument, dispatchOrder, sendConfirmation, sendDispatchEmail, siteUrl }) {
   const limitLogin = createLimiter({ max: 5, windowMs: 15 * 60 * 1000 });
   const ENV_OWNER = () => process.env.ADMIN_USERNAME;
 
@@ -158,6 +158,9 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons, ad
     [/^GET \/api\/admin\/orders\/([^/]+)\/(receipt|invoice)$/, (req, m) => `document.${m[2]}`, (req, m) => m[1]],
     [/^GET \/api\/admin\/(orders|waitlist)\.csv$/, (req, m) => `export.${m[1]}`, () => null, (req) => (Object.keys(req.query).length ? req.query : null)],
     [/^POST \/api\/admin\/emails\/launch$/, () => "email.launch", () => null, (req, m, body) => ({ sent: body?.sent, failed: body?.failed, remaining: body?.remaining, mode: body?.mode })],
+    [/^POST \/api\/admin\/campaigns$/, () => "campaign.create", (req, m, body) => body?.campaign?.id, (req) => ({ subject: req.body?.subject, audience: req.body?.audience, coupon: req.body?.couponCode || null })],
+    [/^POST \/api\/admin\/campaigns\/test$/, () => "campaign.test", () => null, (req) => ({ to: req.body?.to, subject: req.body?.subject })],
+    [/^POST \/api\/admin\/campaigns\/([^/]+)\/send$/, () => "campaign.send", (req, m) => m[1], (req, m, body) => ({ sent: body?.sent, failed: body?.failed, remaining: body?.remaining, mode: body?.mode })],
     [/^POST \/api\/admin\/team$/, () => "team.add", (req) => String(req.body?.username ?? "").toLowerCase(), (req) => ({ role: req.body?.role })],
     [/^PATCH \/api\/admin\/team\/([^/]+)$/, () => "team.update", (req, m) => decodeURIComponent(m[1]), (req) => ({ active: req.body?.active, role: req.body?.role, passwordReset: req.body?.password ? true : undefined })],
     [/^POST \/api\/admin\/password$/, () => "account.password", () => null],
@@ -316,6 +319,7 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons, ad
           pieces: paid.reduce((n, o) => n + o.items.reduce((m, i) => m + i.qty, 0), 0),
           spent: paid.reduce((n, o) => n + orderTotal(o), 0),
           serials: paid.flatMap((o) => (o.certificates ?? []).map((c) => c.serial)),
+          unsubscribed: Boolean(u.marketingOptOut),
         };
       }),
     });
@@ -435,6 +439,181 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons, ad
       }
     });
     res.json({ sent, failed, remaining: Math.max(0, pending.length - sent - failed), mode: MAIL_MODE });
+  });
+
+  // ---------- Offer emails ----------
+  // Admins write an offer (subject, heading, message, optional coupon, one button) and send it to
+  // customer accounts. Each person gets a campaign once (campaign_sends has one row per person), in
+  // small batches like the launch email. Anyone who unsubscribed (marketingOptOut) is always skipped.
+  const AUDIENCES = {
+    prospects: "Accounts that haven't bought yet",
+    all: "All accounts",
+    owners: "Owners (have bought)",
+  };
+  const CTA_TARGETS = {
+    collection: { path: "/#collection", label: "The collection" },
+    account: { path: "/account", label: "Their account" },
+    ...Object.fromEntries(PRODUCTS.map((p) => [p.slug, { path: `/watch/${p.slug}`, label: `${p.name} ${p.edition}` }])),
+  };
+  const CAMPAIGN_BATCH = 20;
+
+  /** Everyone in an audience who hasn't unsubscribed, as { id, email, name, emailToken }. */
+  async function audienceList(audience) {
+    const buyers = await orders.distinct("userId", { status: "paid" });
+    const filter = { marketingOptOut: { $ne: true } };
+    if (audience === "prospects") filter._id = { $nin: buyers };
+    if (audience === "owners") filter._id = { $in: buyers };
+    const list = await users.find(filter, { projection: { name: 1, email: 1, emailToken: 1 } }).sort({ createdAt: 1 }).toArray();
+    return list.map((u) => ({ id: u._id, email: u.email, name: u.name, emailToken: u.emailToken }));
+  }
+
+  /** Checks a draft from the dashboard; returns { draft } or { error }. */
+  async function readDraft(body = {}) {
+    const clean = (v, max) => String(v ?? "").trim().slice(0, max);
+    const draft = {
+      audience: AUDIENCES[body.audience] ? body.audience : null,
+      subject: clean(body.subject, 120),
+      heading: clean(body.heading, 80),
+      message: String(body.message ?? "").replace(/\r\n/g, "\n").trim().slice(0, 4000),
+      ctaLabel: clean(body.ctaLabel, 30) || "Pre-book now",
+      ctaTarget: CTA_TARGETS[body.ctaTarget] ? body.ctaTarget : "collection",
+      couponCode: clean(body.couponCode, 20).toUpperCase() || null,
+    };
+    if (!draft.audience) return { error: "Choose who should get this email." };
+    if (draft.subject.length < 3) return { error: "Please write a subject line." };
+    if (draft.heading.length < 2) return { error: "Please write a heading." };
+    if (draft.message.length < 10) return { error: "Please write the message." };
+    if (draft.couponCode) {
+      const c = await coupons.findOne({ _id: draft.couponCode });
+      if (!c) return { error: `The coupon ${draft.couponCode} doesn't exist.` };
+      if (!c.active) return { error: `The coupon ${draft.couponCode} is paused. Resume it first.` };
+      if (c.expiresAt && new Date(c.expiresAt) <= new Date()) return { error: `The coupon ${draft.couponCode} has expired.` };
+    }
+    return { draft };
+  }
+
+  async function renderOffer(draft, person, site) {
+    const c = draft.couponCode ? await coupons.findOne({ _id: draft.couponCode }) : null;
+    const coupon = c && { code: c._id, label: couponLabel(c), expiresAt: c.expiresAt };
+    const unsubscribeUrl = `${site}/api/unsubscribe?t=${encodeURIComponent(person.emailToken ?? "preview")}`;
+    const mail = offerEmail(
+      { name: person.name, subject: draft.subject, heading: draft.heading, message: draft.message, coupon, cta: { label: draft.ctaLabel, href: `${site}${CTA_TARGETS[draft.ctaTarget].path}` } },
+      { unsubscribeUrl },
+    );
+    // Lets Gmail, Outlook and Apple Mail show their own one-click "Unsubscribe" button.
+    const headers = { "List-Unsubscribe": `<${unsubscribeUrl}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" };
+    return { ...mail, headers };
+  }
+
+  /** `lists` caches each audience's people for this request. */
+  async function campaignRow(c, lists) {
+    const done = await campaignSends.aggregate([{ $match: { campaignId: c._id } }, { $group: { _id: "$ok", n: { $sum: 1 } } }]).toArray();
+    const sent = done.find((d) => d._id === true)?.n ?? 0;
+    const failed = done.find((d) => d._id === false)?.n ?? 0;
+    const people = (lists[c.audience] ??= await audienceList(c.audience));
+    const sentInAudience = await campaignSends.countDocuments({ campaignId: c._id, ok: true, email: { $in: people.map((p) => p.email) } });
+    const audienceSize = people.length;
+    return {
+      id: c._id,
+      subject: c.subject,
+      heading: c.heading,
+      audience: c.audience,
+      audienceLabel: AUDIENCES[c.audience],
+      couponCode: c.couponCode,
+      createdAt: c.createdAt,
+      createdBy: c.createdBy,
+      sent,
+      failed,
+      remaining: Math.max(0, audienceSize - sentInAudience),
+    };
+  }
+
+  app.get("/api/admin/campaigns", requireAdmin, async (_req, res) => {
+    const lists = {};
+    for (const key of Object.keys(AUDIENCES)) lists[key] = await audienceList(key);
+    const list = await campaigns.find({}).sort({ createdAt: -1 }).limit(50).toArray();
+    const rows = [];
+    for (const c of list) rows.push(await campaignRow(c, lists));
+    const usable = (await couponRows()).filter((c) => c.active && !c.expired);
+    res.json({
+      mode: MAIL_MODE,
+      audiences: Object.entries(AUDIENCES).map(([key, label]) => ({ key, label, count: lists[key].length })),
+      unsubscribed: await users.countDocuments({ marketingOptOut: true }),
+      ctaTargets: Object.entries(CTA_TARGETS).map(([key, t]) => ({ key, label: t.label })),
+      coupons: usable.map((c) => ({ code: c.code, label: c.label, note: c.note })),
+      campaigns: rows,
+    });
+  });
+
+  // What the email will look like, addressed to a sample customer. Nothing is saved or sent.
+  app.post("/api/admin/campaigns/preview", requireAdmin, async (req, res) => {
+    const { draft, error } = await readDraft(req.body);
+    if (error) return res.status(400).json({ error });
+    const mail = await renderOffer(draft, { name: "Aarav Sharma" }, siteUrl(req));
+    res.json({ subject: mail.subject, html: mail.html });
+  });
+
+  // One test copy to an address the admin types (their own), marked [TEST] in the subject.
+  app.post("/api/admin/campaigns/test", requireAdmin, async (req, res) => {
+    const { draft, error } = await readDraft(req.body);
+    if (error) return res.status(400).json({ error });
+    const to = String(req.body?.to ?? "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(to)) return res.status(400).json({ error: "Enter the email address to send the test to." });
+    const mail = await renderOffer(draft, { name: req.admin.name }, siteUrl(req));
+    const result = await trySendMail({ to, ...mail, subject: `[TEST] ${mail.subject}` });
+    if (result.failed) return res.status(502).json({ error: `The test email failed to send: ${result.error}` });
+    res.json({ ok: true, to, mode: MAIL_MODE });
+  });
+
+  app.post("/api/admin/campaigns", requireAdmin, async (req, res) => {
+    const { draft, error } = await readDraft(req.body);
+    if (error) return res.status(400).json({ error });
+    const id = `CMP-${Date.now().toString(36).toUpperCase()}`;
+    await campaigns.insertOne({ _id: id, ...draft, createdAt: new Date(), createdBy: req.admin.username });
+    res.status(201).json({ campaign: await campaignRow(await campaigns.findOne({ _id: id }), {}) });
+  });
+
+  // Sends the next batch. People never tried come first, earlier failures last, so one bad address
+  // can't block the rest. The dashboard keeps calling until nothing is left or a batch sends none.
+  app.post("/api/admin/campaigns/:id/send", requireAdmin, async (req, res) => {
+    const campaign = await campaigns.findOne({ _id: req.params.id });
+    if (!campaign) return res.status(404).json({ error: "Campaign not found." });
+    if (campaign.couponCode) {
+      const c = await coupons.findOne({ _id: campaign.couponCode });
+      if (!c?.active || (c.expiresAt && new Date(c.expiresAt) <= new Date())) return res.status(409).json({ error: `The coupon ${campaign.couponCode} is paused or expired, so this offer wasn't sent.` });
+    }
+    const people = await audienceList(campaign.audience);
+    const records = await campaignSends.find({ campaignId: campaign._id }, { projection: { email: 1, ok: 1 } }).toArray();
+    const done = new Set(records.filter((r) => r.ok).map((r) => r.email));
+    const failedBefore = new Set(records.filter((r) => !r.ok).map((r) => r.email));
+    const pending = people.filter((p) => !done.has(p.email)).sort((a, b) => failedBefore.has(a.email) - failedBefore.has(b.email));
+
+    let sent = 0;
+    let failed = 0;
+    const errors = [];
+    const started = Date.now();
+    const site = siteUrl(req);
+    await mailBatch(async () => {
+      for (const person of pending.slice(0, CAMPAIGN_BATCH)) {
+        if (Date.now() - started > SEND_BUDGET_MS) break;
+        if (!person.emailToken) {
+          person.emailToken = randomBytes(18).toString("base64url");
+          await users.updateOne({ _id: person.id, emailToken: { $exists: false } }, { $set: { emailToken: person.emailToken } });
+          person.emailToken = (await users.findOne({ _id: person.id }, { projection: { emailToken: 1 } })).emailToken;
+        }
+        const result = await trySendMail({ to: person.email, ...(await renderOffer(campaign, person, site)) });
+        await campaignSends.updateOne(
+          { campaignId: campaign._id, email: person.email },
+          { $set: { at: new Date(), ok: !result.failed, error: result.failed ? String(result.error).slice(0, 300) : null, userId: person.id } },
+          { upsert: true },
+        );
+        if (result.failed) {
+          failed++;
+          if (errors.length < 3) errors.push(`${person.email}: ${result.error}`);
+        } else sent++;
+      }
+    });
+    res.json({ sent, failed, errors, remaining: Math.max(0, pending.length - sent), mode: MAIL_MODE });
   });
 
   // ---------- Team ----------

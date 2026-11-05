@@ -41,6 +41,7 @@ export default function Privacy() {
             "To create and secure your account and keep you signed in.",
             "To reserve your pieces, take payment, issue your certificate of edition and serial number, and deliver your watch.",
             "To contact you about your order, delivery, or the launch.",
+            "If you have an account, to email you occasional offers and news about RUBIIK. Every such email has an unsubscribe link, and you can also ask us to stop by writing to us.",
             "To show your chosen display name on the Founding Owners wall, only if you opted in.",
             "To prevent fraud and misuse, and to meet our legal, tax and accounting obligations, including GST invoicing.",
           ]}
@@ -63,6 +64,9 @@ export default function Privacy() {
             </>,
             <>
               <Strong>Vercel</Strong> — hosts this website and its servers.
+            </>,
+            <>
+              <Strong>Our email provider</Strong> — delivers the emails we send you (order, dispatch, account and offer emails), and receives your name and email address to do so.
             </>,
             <>
               <Strong>Our delivery partner</Strong> — receives your name, phone number and address to deliver your watch.

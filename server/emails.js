@@ -9,7 +9,7 @@ const firstName = (name) => String(name ?? "").trim().split(/\s+/)[0] || "there"
 const delivery = () => formatDate(LAUNCH.deliveryFrom, { year: "numeric" });
 
 /** Wraps body rows in the RUBIIK email frame: navy header, ivory card, small footer. */
-function frame({ preheader, heading, body, cta }) {
+function frame({ preheader, heading, body, cta, footer = "" }) {
   const button = cta
     ? `<tr><td style="padding:28px 0 4px"><a href="${esc(cta.href)}" style="display:inline-block;background:#C9A464;color:#0B1219;text-decoration:none;font:600 13px/1 Arial,sans-serif;letter-spacing:2px;text-transform:uppercase;padding:15px 26px">${esc(cta.label)}</a></td></tr>`
     : "";
@@ -31,7 +31,7 @@ function frame({ preheader, heading, body, cta }) {
     </td></tr>
     <tr><td style="padding:18px 8px;font:400 11px/1.6 Arial,sans-serif;color:#6B7480;text-align:center">
       RUBIIK is a product of ${esc(CONTACT.company)}<br>${esc(CONTACT.address.join(", "))}<br>
-      GSTIN ${esc(CONTACT.gstin)} · <a href="mailto:${esc(CONTACT.email)}" style="color:#6B7480">${esc(CONTACT.email)}</a>
+      GSTIN ${esc(CONTACT.gstin)} · <a href="mailto:${esc(CONTACT.email)}" style="color:#6B7480">${esc(CONTACT.email)}</a>${footer}
     </td></tr>
   </table>
 </td></tr></table></body></html>`;
@@ -129,5 +129,38 @@ export function launchEmail({ name, owner }, { siteUrl }) {
   const text = owner
     ? `RUBIIK ONE launched today and your numbered piece is part of it. Deliveries begin from ${delivery()}. ${siteUrl}/account`
     : `RUBIIK ONE is here: ${LAUNCH.editionPerModel} numbered pieces of each model, never repeated. ${siteUrl}/#collection`;
+  return { subject, html, text };
+}
+
+/**
+ * An offer written in the admin dashboard: the admin's own heading and message (plain text, blank
+ * lines between paragraphs), an optional coupon code, one button, and an unsubscribe link.
+ */
+export function offerEmail({ name, subject, heading, message, coupon, cta }, { unsubscribeUrl }) {
+  const paragraphs = String(message).trim().split(/\n\s*\n/).map((para) => para.trim()).filter(Boolean);
+  const hello = name ? `Dear ${firstName(name)},` : "";
+  const couponBox = coupon
+    ? `<tr><td style="padding:10px 0 14px"><table role="presentation" cellpadding="0" cellspacing="0" style="border:1px dashed #C9A464;background:#FBF8F1"><tr><td style="padding:16px 22px">
+        <div style="font:400 11px/1.4 Arial,sans-serif;letter-spacing:2px;text-transform:uppercase;color:#6B7480">Your code · ${esc(coupon.label)}</div>
+        <div style="font:600 24px/1.3 'Courier New',monospace;letter-spacing:3px;color:#0B1219;padding-top:4px">${esc(coupon.code)}</div>
+        <div style="font:400 12px/1.5 Arial,sans-serif;color:#6B7480;padding-top:4px">Enter it at checkout.${coupon.expiresAt ? ` Valid until ${esc(formatDate(coupon.expiresAt, { year: "numeric" }))}.` : ""}</div>
+      </td></tr></table></td></tr>`
+    : "";
+  const html = frame({
+    preheader: paragraphs[0]?.slice(0, 140) ?? heading,
+    heading,
+    body: [hello && p(esc(hello)), ...paragraphs.map((para) => p(esc(para).replace(/\n/g, "<br>"))), couponBox].join(""),
+    cta,
+    footer: `<br><br>You're receiving this because you have a RUBIIK account. <a href="${esc(unsubscribeUrl)}" style="color:#6B7480">Unsubscribe from offers</a>`,
+  });
+  const text = [
+    hello,
+    ...paragraphs,
+    coupon && `Your code (${coupon.label}): ${coupon.code} — enter it at checkout.`,
+    `${cta.label}: ${cta.href}`,
+    `Unsubscribe from offers: ${unsubscribeUrl}`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
   return { subject, html, text };
 }

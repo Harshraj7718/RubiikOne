@@ -40,6 +40,8 @@ export async function connectDb() {
   const resets = db.collection("password_resets"); // { hash, userId, expiresAt }: one-time reset links
   const admins = db.collection("admins"); // _id = username; team members added by an owner
   const audit = db.collection("audit"); // { at, admin, role, action, target, details, ip }: admin activity log
+  const campaigns = db.collection("campaigns"); // offer emails written in the admin dashboard
+  const campaignSends = db.collection("campaign_sends"); // { campaignId, email, at, ok, error }: one per person per campaign
 
   await Promise.all([
     users.createIndex({ email: 1 }, { unique: true }),
@@ -53,6 +55,9 @@ export async function connectDb() {
     resets.createIndex({ hash: 1 }, { unique: true }),
     audit.createIndex({ at: -1 }),
     audit.createIndex({ admin: 1, at: -1 }),
+    campaignSends.createIndex({ campaignId: 1, email: 1 }, { unique: true }),
+    // The private token in each offer email's unsubscribe link.
+    users.createIndex({ emailToken: 1 }, { unique: true, sparse: true }),
     // Reset links expire after 30 minutes; MongoDB removes them on its own.
     resets.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
   ]);
@@ -71,5 +76,5 @@ export async function connectDb() {
     }
   }
 
-  return { client, db, users, sessions, orders, waitlist, meta, coupons, resets, admins, audit, withTransaction };
+  return { client, db, users, sessions, orders, waitlist, meta, coupons, resets, admins, audit, campaigns, campaignSends, withTransaction };
 }
