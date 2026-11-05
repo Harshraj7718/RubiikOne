@@ -74,6 +74,9 @@ const EMAILS = {
   confirmation: { label: "Order confirmation", note: "with the receipt" },
   dispatch: { label: "Dispatch email", note: "with tracking and the tax invoice" },
 };
+/** The message for a failed request that came back without one, e.g. a hosting timeout. */
+const httpError = (res, fallback) => (res.status === 504 ? "The server ran out of time while the mail server was responding. Try again." : `${fallback} (error ${res.status})`);
+
 const mailStatus = (m) => (!m ? "Not sent yet" : !m.ok ? `Failed · ${fmtDateTime(m.at)}${m.error ? ` · ${m.error}` : ""}` : m.mode === "smtp" ? `Sent · ${fmtDateTime(m.at)}` : `Logged only · ${fmtDateTime(m.at)}`);
 
 /** The order's customer emails, each with a button to send it by hand if it didn't go out on its own. */
@@ -84,7 +87,7 @@ function Emails({ order: o, onChanged }) {
     try {
       const res = await fetch(`/api/admin/orders/${o.id}/emails/${kind}`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Couldn't send the email.");
+      if (!res.ok) throw new Error(data.error ?? httpError(res, "Couldn't send the email."));
       const record = { at: new Date().toISOString(), mode: data.email === "sent" ? "smtp" : "log", ok: data.email !== "failed" };
       onChanged({ emails: { ...o.emails, [kind]: record }, unsentEmails: data.email === "failed" ? o.unsentEmails : (o.unsentEmails ?? []).filter((k) => k !== kind) });
       if (data.email === "failed") throw new Error(`The email failed to send${data.error ? `: ${data.error}` : "."}`);
@@ -155,7 +158,7 @@ function SendUnsent({ count, onDone }) {
       for (;;) {
         const res = await fetch("/api/admin/emails/unsent", { method: "POST" });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error ?? "Couldn't send the emails.");
+        if (!res.ok) throw new Error(data.error ?? httpError(res, "Couldn't send the emails."));
         sent += data.sent;
         setState({ busy: true, msg: `${sent} sent…`, error: "" });
         if (data.failed) throw new Error(`${data.failed} failed (${data.failures.map((f) => `${f.id} ${f.kind}`).join(", ")}): ${data.failures[0].error}`);

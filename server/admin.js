@@ -10,7 +10,7 @@ import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto
 import express from "express";
 import { LAUNCH, PRODUCTS, EDITION_TOTAL, couponLabel } from "../src/data/catalog.js";
 import { readCookie, hashPassword, verifyPassword } from "./auth.js";
-import { trySendMail, checkMail, MAIL_MODE } from "./mailer.js";
+import { trySendMail, checkMail, mailBatch, MAIL_MODE } from "./mailer.js";
 import { launchEmail } from "./emails.js";
 
 const ADMIN_COOKIE = "rbk_admin";
@@ -365,8 +365,12 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons, ad
     res.json({ ok: true, ...mailOutcome(await send(order, siteUrl(req))) });
   });
 
-  // Sends every email that hasn't gone out yet, a few at a time so each call stays inside the hosting
-  // time limit; the dashboard keeps calling while emails remain and none failed.
+  // Bulk sends share one mail-server connection, and stop starting new emails after SEND_BUDGET_MS so
+  // a call always finishes inside the hosting time limit; the dashboard calls again for the rest.
+  const SEND_BUDGET_MS = 25000;
+
+  // Sends every email that hasn't gone out yet, a few per call; the dashboard keeps calling while
+  // emails remain and none failed.
   app.post("/api/admin/emails/check", requireAdmin, async (_req, res) => res.json(await checkMail()));
 
   const UNSENT_BATCH = 5;
@@ -374,11 +378,15 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons, ad
     const pending = (await findOrders({ status: "unsent" })).flatMap((o) => o.unsentEmails.map((kind) => ({ id: o.id, kind })));
     let sent = 0;
     const failures = [];
-    for (const { id, kind } of pending.slice(0, UNSENT_BATCH)) {
-      const result = await EMAIL_SENDERS[kind](await orders.findOne({ _id: id }), siteUrl(req));
-      if (result.failed) failures.push({ id, kind, error: result.error });
-      else sent++;
-    }
+    const started = Date.now();
+    await mailBatch(async () => {
+      for (const { id, kind } of pending.slice(0, UNSENT_BATCH)) {
+        if (Date.now() - started > SEND_BUDGET_MS) break;
+        const result = await EMAIL_SENDERS[kind](await orders.findOne({ _id: id }), siteUrl(req));
+        if (result.failed) failures.push({ id, kind, error: result.error });
+        else sent++;
+      }
+    });
     res.json({ sent, failed: failures.length, failures, remaining: pending.length - sent - failures.length, mode: MAIL_MODE });
   });
 
@@ -408,20 +416,24 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons, ad
     const pending = (await launchRecipients()).filter((r) => !r.sent);
     let sent = 0;
     let failed = 0;
-    for (const r of pending.slice(0, LAUNCH_BATCH)) {
-      const mail = launchEmail({ name: r.name, owner: r.kind === "owner" }, { siteUrl: siteUrl(req) });
-      const result = await trySendMail({ to: r.email, ...mail });
-      if (result.failed) {
-        failed++;
-        continue;
+    const started = Date.now();
+    await mailBatch(async () => {
+      for (const r of pending.slice(0, LAUNCH_BATCH)) {
+        if (Date.now() - started > SEND_BUDGET_MS) break;
+        const mail = launchEmail({ name: r.name, owner: r.kind === "owner" }, { siteUrl: siteUrl(req) });
+        const result = await trySendMail({ to: r.email, ...mail });
+        if (result.failed) {
+          failed++;
+          continue;
+        }
+        sent++;
+        const now = new Date();
+        if (r.kind === "owner") {
+          await users.updateOne({ _id: r.id }, { $set: { launchEmailAt: now } });
+          await waitlist.updateOne({ email: r.email }, { $set: { launchEmailAt: now } });
+        } else await waitlist.updateOne({ _id: r.id }, { $set: { launchEmailAt: now } });
       }
-      sent++;
-      const now = new Date();
-      if (r.kind === "owner") {
-        await users.updateOne({ _id: r.id }, { $set: { launchEmailAt: now } });
-        await waitlist.updateOne({ email: r.email }, { $set: { launchEmailAt: now } });
-      } else await waitlist.updateOne({ _id: r.id }, { $set: { launchEmailAt: now } });
-    }
+    });
     res.json({ sent, failed, remaining: Math.max(0, pending.length - sent - failed), mode: MAIL_MODE });
   });
 

@@ -6,29 +6,45 @@ import { waitUntil } from "@vercel/functions";
 import { CONTACT } from "../src/data/legal.js";
 
 // Cleaned up: a value pasted into Vercel's dashboard often carries a stray space, newline or quotes.
-const [SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS] = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS"].map((k) => process.env[k]?.trim().replace(/^(["'])(.*)$/, "$2"));
+const [SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS] = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS"].map((k) => process.env[k]?.trim().replace(/^(["'])(.*)\1$/, "$2"));
 export const MAIL_MODE = SMTP_HOST && SMTP_USER && SMTP_PASS ? "smtp" : "log";
 const FROM = process.env.MAIL_FROM || `RUBIIK <${CONTACT.email}>`;
 
 /** The last few emails in log mode (newest last), for local testing. */
 export const outbox = [];
 
-let transport;
-
-function smtp() {
+// The MilesWeb (cPanel/Exim) server waits ~14 s before greeting every new connection, more from
+// abroad, then answers quickly. So the greeting gets a generous wait, and a batch of emails shares
+// one connection (mailBatch) so that wait is paid once per batch, not once per email. Everything
+// still gives up well inside the function's time limit (vercel.json maxDuration).
+function createTransport(pool = false) {
   const port = Number(SMTP_PORT || 465);
-  // Port 465 is SMTP over TLS; 587 upgrades with STARTTLS. Short timeouts: a mail server that hangs
-  // must give up well inside the function's time limit (vercel.json maxDuration), so the outcome is
-  // still recorded on the order.
-  return (transport ??= nodemailer.createTransport({
+  return nodemailer.createTransport({
     host: SMTP_HOST,
-    port,
+    port, // 465 is SMTP over TLS; 587 upgrades with STARTTLS
     secure: port === 465,
     auth: { user: SMTP_USER, pass: SMTP_PASS },
-    connectionTimeout: 20000,
-    greetingTimeout: 15000,
-    socketTimeout: 30000,
-  }));
+    connectionTimeout: 15000,
+    greetingTimeout: 40000,
+    socketTimeout: 40000,
+    ...(pool && { pool: true, maxConnections: 1 }),
+  });
+}
+
+let transport;
+let batchTransport = null;
+const smtp = () => batchTransport ?? (transport ??= createTransport());
+
+/** Runs `task` with every email it sends going over one shared connection, closed at the end. */
+export async function mailBatch(task) {
+  if (MAIL_MODE === "log" || batchTransport) return task();
+  batchTransport = createTransport(true);
+  try {
+    return await task();
+  } finally {
+    batchTransport.close();
+    batchTransport = null;
+  }
 }
 
 /** Connects and logs in to the mail server without sending anything; for the admin "check" button. */
