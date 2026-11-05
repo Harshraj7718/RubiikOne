@@ -57,7 +57,7 @@ const shortName = (name = "") => {
   return last ? `${first} ${last[0].toUpperCase()}.` : first ?? "";
 };
 
-export function mountAdmin(app, { users, orders, waitlist, sessions, coupons, admins, audit }, { root, sendDocument, dispatchOrder, siteUrl }) {
+export function mountAdmin(app, { users, orders, waitlist, sessions, coupons, admins, audit }, { root, sendDocument, dispatchOrder, sendConfirmation, siteUrl }) {
   const limitLogin = createLimiter({ max: 5, windowMs: 15 * 60 * 1000 });
   const ENV_OWNER = () => process.env.ADMIN_USERNAME;
 
@@ -152,6 +152,7 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons, ad
     [/^DELETE \/api\/admin\/coupons\/([^/]+)$/, () => "coupon.delete", (req, m) => decodeURIComponent(m[1]).toUpperCase()],
     [/^PATCH \/api\/admin\/orders\/([^/]+)\/wall$/, () => "wall.update", (req, m) => m[1], (req) => ({ show: req.body?.show, displayName: req.body?.displayName })],
     [/^POST \/api\/admin\/orders\/([^/]+)\/dispatch$/, () => "order.dispatch", (req, m) => m[1], (req, m, body) => ({ courier: req.body?.courier, tracking: req.body?.tracking, invoice: body?.invoiceNumber, email: body?.email })],
+    [/^POST \/api\/admin\/orders\/([^/]+)\/confirmation$/, () => "email.confirmation", (req, m) => m[1], (req, m, body) => ({ email: body?.email })],
     [/^GET \/api\/admin\/orders\/([^/]+)\/(receipt|invoice)$/, (req, m) => `document.${m[2]}`, (req, m) => m[1]],
     [/^GET \/api\/admin\/(orders|waitlist)\.csv$/, (req, m) => `export.${m[1]}`, () => null, (req) => (Object.keys(req.query).length ? req.query : null)],
     [/^POST \/api\/admin\/emails\/launch$/, () => "email.launch", () => null, (req, m, body) => ({ sent: body?.sent, failed: body?.failed, remaining: body?.remaining, mode: body?.mode })],
@@ -335,6 +336,15 @@ export function mountAdmin(app, { users, orders, waitlist, sessions, coupons, ad
       if (!err.status) throw err;
       res.status(err.status).json({ error: err.message });
     }
+  });
+
+  // Re-sends a paid order's confirmation email with its receipt (e.g. after the mail server failed).
+  app.post("/api/admin/orders/:id/confirmation", requireAdmin, async (req, res) => {
+    const order = await orders.findOne({ _id: req.params.id });
+    if (!order) return res.status(404).json({ error: "Order not found." });
+    if (order.status !== "paid") return res.status(409).json({ error: "Only paid orders have a confirmation email." });
+    const result = await sendConfirmation(order, siteUrl(req));
+    res.json({ ok: true, email: result.failed ? "failed" : result.sent ? "sent" : "logged", error: result.failed ? result.error : undefined });
   });
 
   // ---------- Launch email ----------

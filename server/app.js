@@ -14,7 +14,7 @@ import { mountAuth } from "./auth.js";
 import { mountAdmin, createLimiter } from "./admin.js";
 import { PAYMENT_MODE, startPayment, verifyPayment } from "./payments.js";
 import { invoicePdf, receiptPdf } from "./invoice.js";
-import { trySendMail, MAIL_MODE } from "./mailer.js";
+import { trySendMail, inBackground, MAIL_MODE } from "./mailer.js";
 import { orderConfirmationEmail, dispatchEmail } from "./emails.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -59,7 +59,7 @@ export async function createApp({ serveClient = true } = {}) {
   const siteUrl = (req) => (process.env.SITE_URL || `${req.protocol}://${req.get("host")}`).replace(/\/$/, "");
 
   const { requireUser } = mountAuth(app, store, { siteUrl });
-  mountAdmin(app, store, { root, sendDocument, dispatchOrder, siteUrl });
+  mountAdmin(app, store, { root, sendDocument, dispatchOrder, sendConfirmation, siteUrl });
 
   const phase = () => phaseAt(Date.now(), FORCE_PREBOOK);
   // Orders that currently claim pieces: paid ones, and unpaid ones whose hold hasn't lapsed.
@@ -330,18 +330,23 @@ export async function createApp({ serveClient = true } = {}) {
         await orders.updateOne({ _id: o._id }, { $set: { status: "paid", certificates, payment, receipt } }, { session });
         return { ...o, status: "paid", certificates, payment, receipt, justPaid: true };
       });
-      // Confirmation email with the receipt attached, once per order. A mail failure never fails the payment.
-      if (order.justPaid) {
-        const mail = orderConfirmationEmail(order, { siteUrl: siteUrl(req) });
-        const result = await trySendMail({ to: order.customer.email, ...mail, attachments: [{ filename: docFile(order, "receipt"), content: await receiptPdf(order) }] });
-        await orders.updateOne({ _id: order._id }, { $set: { "emails.confirmation": { at: new Date(), mode: MAIL_MODE, ok: !result.failed } } });
-      }
+      // The payment is saved: answer the browser now, then send the confirmation email with the receipt
+      // attached (once per order). A slow or failed email never holds up or fails the payment.
       res.json({ order: orderView(order) });
+      if (order.justPaid) inBackground(() => sendConfirmation(order, siteUrl(req)));
     } catch (err) {
       if (!err.status) console.error(err);
       res.status(err.status ?? 500).json({ error: err.status ? err.message : "Something went wrong. Please try again." });
     }
   });
+
+  /** Emails a paid order's confirmation with its receipt and records the outcome on the order. */
+  async function sendConfirmation(order, site) {
+    const mail = orderConfirmationEmail(order, { siteUrl: site });
+    const result = await trySendMail({ to: order.customer.email, ...mail, attachments: [{ filename: docFile(order, "receipt"), content: await receiptPdf(order) }] });
+    await orders.updateOne({ _id: order._id }, { $set: { "emails.confirmation": { at: new Date(), mode: MAIL_MODE, ok: !result.failed } } });
+    return result;
+  }
 
   const docFile = (o, kind) => `RUBIIK-${kind === "receipt" ? "receipt" : "invoice"}-${o[kind].number.replaceAll("/", "-")}.pdf`;
 

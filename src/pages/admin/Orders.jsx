@@ -67,6 +67,33 @@ function Dispatch({ order: o, onChanged }) {
   );
 }
 
+/** Re-sends the order confirmation email with the receipt attached. */
+function ResendConfirmation({ order: o, onChanged }) {
+  const [state, setState] = useState({ busy: false, error: "", done: "" });
+  const resend = async () => {
+    setState({ busy: true, error: "", done: "" });
+    try {
+      const res = await fetch(`/api/admin/orders/${o.id}/confirmation`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Couldn't send the confirmation email.");
+      if (data.email === "failed") throw new Error(`The email failed to send${data.error ? `: ${data.error}` : "."}`);
+      setState({ busy: false, error: "", done: data.email === "sent" ? `Confirmation emailed to ${o.customer.email}.` : "The email went to the server log, because SMTP isn't set up yet." });
+      onChanged({ emails: { ...o.emails, confirmation: { at: new Date().toISOString(), mode: data.email === "sent" ? "smtp" : "log", ok: true } } });
+    } catch (err) {
+      setState({ busy: false, error: err.message, done: "" });
+    }
+  };
+  return (
+    <div className="mt-4 text-sm">
+      <button type="button" onClick={resend} disabled={state.busy} className="text-gold hover:text-gold-light disabled:opacity-50">
+        {state.busy ? "Sending…" : o.emails?.confirmation ? "Re-send confirmation email" : "Send confirmation email"}
+      </button>
+      {state.done && <p className="mt-2 text-emerald-300">{state.done}</p>}
+      {state.error && <p className="mt-2 text-red-300">{state.error}</p>}
+    </div>
+  );
+}
+
 const FILTERS = [
   ["all", "All"],
   ["paid", "Paid"],
@@ -239,6 +266,7 @@ function OrderDrawer({ order: o, onClose, onChanged }) {
             )}
           </div>
         )}
+        {o.status === "paid" && <ResendConfirmation order={o} onChanged={onChanged} />}
         {o.status === "paid" && <Dispatch order={o} onChanged={onChanged} />}
 
         {o.certificates.length > 0 && (

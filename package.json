@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@expo-google-fonts/noto-sans": "0.4.2",
+    "@vercel/functions": "3.10.2",
     "compression": "1.8.0",
     "express": "4.21.2",
     "framer-motion": "11.15.0",

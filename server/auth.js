@@ -2,7 +2,7 @@
 // Only a SHA-256 of each session token is stored, so a leaked database can't be replayed as logins.
 import { scrypt, randomBytes, timingSafeEqual, createHash, randomUUID } from "node:crypto";
 import { promisify } from "node:util";
-import { trySendMail } from "./mailer.js";
+import { trySendMail, inBackground } from "./mailer.js";
 import { passwordResetEmail } from "./emails.js";
 
 const scryptAsync = promisify(scrypt);
@@ -138,7 +138,7 @@ export function mountAuth(app, { users, sessions, resets }, { siteUrl }) {
       await resets.insertOne({ hash: tokenHash(token), userId: user._id, expiresAt: new Date(Date.now() + RESET_MINUTES * 60000) });
       // The token travels in the #fragment, which browsers never send to servers or in Referer headers.
       const mail = passwordResetEmail(user.name, `${siteUrl(req)}/reset-password#${token}`);
-      await trySendMail({ to: user.email, ...mail });
+      inBackground(() => trySendMail({ to: user.email, ...mail })); // the reply never waits on the mail server
     }
     res.json({ ok: true, message: "If an account exists for that email, a reset link is on its way. It works for 30 minutes." });
   });

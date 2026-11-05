@@ -2,9 +2,11 @@
 // mail is sent over SMTP. Without them the store runs in log mode: each email is printed to the
 // server log and kept in `outbox`, so every flow still works locally and nothing fails.
 import nodemailer from "nodemailer";
+import { waitUntil } from "@vercel/functions";
 import { CONTACT } from "../src/data/legal.js";
 
-const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
+// Trimmed: a value pasted into Vercel's dashboard often carries a stray space or newline.
+const [SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS] = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS"].map((k) => process.env[k]?.trim());
 export const MAIL_MODE = SMTP_HOST && SMTP_USER && SMTP_PASS ? "smtp" : "log";
 const FROM = process.env.MAIL_FROM || `RUBIIK <${CONTACT.email}>`;
 
@@ -23,7 +25,17 @@ export async function sendMail({ to, subject, html, text, attachments = [] }) {
   }
   const port = Number(SMTP_PORT || 465);
   // Port 465 is SMTP over TLS; 587 upgrades with STARTTLS.
-  transport ??= nodemailer.createTransport({ host: SMTP_HOST, port, secure: port === 465, auth: { user: SMTP_USER, pass: SMTP_PASS } });
+  // Short timeouts: a mail server that hangs must give up well inside the function's time limit
+  // (vercel.json maxDuration), so the outcome is still recorded on the order.
+  transport ??= nodemailer.createTransport({
+    host: SMTP_HOST,
+    port,
+    secure: port === 465,
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
+    connectionTimeout: 20000,
+    greetingTimeout: 15000,
+    socketTimeout: 30000,
+  });
   await transport.sendMail({ from: FROM, replyTo: CONTACT.email, to, subject, html, text, attachments });
   return { sent: true };
 }
@@ -36,4 +48,16 @@ export async function trySendMail(message) {
     console.error(`Email to ${message.to} failed: ${err.message}`);
     return { failed: true, error: err.message };
   }
+}
+
+/**
+ * Runs `task` after the reply has gone to the browser, so a slow mail server never holds up the page.
+ * On Vercel, waitUntil keeps the function alive until the task finishes; locally it simply runs.
+ */
+export function inBackground(task) {
+  const run = Promise.resolve()
+    .then(task)
+    .catch((err) => console.error(`Background task failed: ${err.message}`));
+  waitUntil(run);
+  return run;
 }
